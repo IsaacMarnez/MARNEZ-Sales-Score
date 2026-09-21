@@ -1,4 +1,4 @@
-# MARNEZ Sales Score · V0.2.0
+# MARNEZ Sales Score · V0.2.1
 
 Versión conectada al Excel original compartido de SharePoint mediante un vínculo anónimo de solo lectura.
 
@@ -40,3 +40,10 @@ crons = ["* * * * *"]
 ```
 
 Esto revisa el Excel una vez por minuto.
+
+
+## Corrección 0.2.1
+- Maneja manualmente las redirecciones de vínculos anónimos de SharePoint.
+- Conserva las cookies temporales de invitado entre redirecciones, como un navegador.
+- Usa encabezados de navegador para evitar rechazos del enlace compartido.
+- Agrega `/api/sharepoint/diagnostic` para ver únicamente estados/hosts de la cadena, sin exponer cookies ni el vínculo secreto.
