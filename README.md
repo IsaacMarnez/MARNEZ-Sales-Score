@@ -1,8 +1,8 @@
-# MARNEZ Sales Score · V0.5.3
+# MARNEZ Sales Score · V0.6.0
 
 Versión con acceso administrativo protegido, roles reales y reconocimiento Top Seller premium.
 
-## Novedades V0.5.3
+## Novedades V0.6.0
 
 - Login real para `/admin` con sesión segura mediante cookie `HttpOnly`.
 - El botón **Administrador** no aparece en la vista pública si no existe una sesión administrativa iniciada.
@@ -41,7 +41,7 @@ Después del despliegue:
 ```json
 {
   "ok": true,
-  "version": "0.5.3",
+  "version": "0.6.0",
   "d1": true,
   "sharepointConfigured": true,
   "authConfigured": false
@@ -71,7 +71,7 @@ Las rutas `/api/admin/*`, sincronización y diagnóstico de SharePoint están pr
 
 ## Base D1
 
-La V0.5.3 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
+La V0.6.0 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
 
 ## Top Seller y diploma
 
@@ -87,14 +87,14 @@ La vista pública mantiene:
 El diploma tiene fondo blanco, detalles dorados, identidad MARNEZ y muestra las ventas del asesor. No incluye firma.
 
 
-## Corrección V0.5.3
+## Corrección V0.6.0
 - Corrige HTTP 500 al activar el primer administrador en Workers Free.
 - Sustituye PBKDF2 intensivo por HMAC-SHA256 con salt y secreto privado del Worker para respetar el límite de CPU.
 - Los errores de activación/login ahora devuelven un mensaje descriptivo.
 - Mantén `ADMIN_SETUP_CODE` configurado; opcionalmente puede usarse `ADMIN_AUTH_SECRET` como secreto dedicado.
 
 
-## Acceso inicial V0.5.3
+## Acceso inicial V0.6.0
 - Se eliminó completamente el campo `ADMIN_SETUP_CODE`.
 - La pantalla `/admin` muestra únicamente el login.
 - Si todavía no existe un administrador, el primer inicio de sesión válido crea automáticamente el Superadministrador.
