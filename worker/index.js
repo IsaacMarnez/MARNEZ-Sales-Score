@@ -212,22 +212,112 @@ async function sha256Hex(buffer){
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-function sourceUrl(env){
+function sourceUrl(env, forceDownload=true){
   const raw=(env.SHAREPOINT_FILE_URL||'').trim();
   if(!raw)throw new Error('Falta SHAREPOINT_FILE_URL en Cloudflare.');
   const u=new URL(raw);
-  if(!u.searchParams.has('download'))u.searchParams.set('download','1');
+  if(forceDownload)u.searchParams.set('download','1');
   return u.toString();
 }
 
-async function downloadSource(env){
-  const url=sourceUrl(env);
-  const r=await fetch(url,{redirect:'follow',headers:{'user-agent':'MARNEZ-Sales-Score/0.2'}});
-  if(!r.ok)throw new Error(`SharePoint respondió HTTP ${r.status}`);
-  const buffer=await r.arrayBuffer();
-  const bytes=new Uint8Array(buffer);
-  if(bytes.length<4 || bytes[0]!==0x50 || bytes[1]!==0x4b)throw new Error('El vínculo no devolvió un archivo XLSX válido. Revisa que el enlace permita descarga sin iniciar sesión.');
-  return {buffer,contentType:r.headers.get('content-type')||'',lastModified:r.headers.get('last-modified')||'',etag:r.headers.get('etag')||'',finalUrl:r.url};
+function setCookieValues(headers){
+  if(typeof headers.getSetCookie==='function')return headers.getSetCookie();
+  const raw=headers.get('set-cookie');
+  if(!raw)return [];
+  // Best-effort fallback. Cloudflare Workers normally exposes getSetCookie().
+  return raw.split(/,(?=\s*[^;,=]+=[^;,]+)/g);
+}
+
+function absorbCookies(jar,headers){
+  for(const line of setCookieValues(headers)){
+    const first=String(line||'').split(';',1)[0];
+    const eq=first.indexOf('=');
+    if(eq<=0)continue;
+    const name=first.slice(0,eq).trim();
+    const value=first.slice(eq+1).trim();
+    if(!name)continue;
+    if(!value)jar.delete(name); else jar.set(name,value);
+  }
+}
+
+function cookieHeader(jar){
+  return [...jar.entries()].map(([k,v])=>`${k}=${v}`).join('; ');
+}
+
+async function sharePointFetchWithCookieJar(startUrl,{jar=new Map(),maxRedirects=12}={}){
+  let current=startUrl;
+  const trace=[];
+  for(let i=0;i<=maxRedirects;i++){
+    const headers={
+      'accept':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+      'accept-language':'es-MX,es;q=0.9,en;q=0.7',
+      'cache-control':'no-cache',
+      'pragma':'no-cache',
+      'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
+    };
+    const cookies=cookieHeader(jar);
+    if(cookies)headers.cookie=cookies;
+
+    const r=await fetch(current,{method:'GET',redirect:'manual',headers});
+    absorbCookies(jar,r.headers);
+    const u=new URL(current);
+    trace.push({status:r.status,host:u.hostname,redirect:!!r.headers.get('location')});
+
+    if(r.status>=300 && r.status<400){
+      const loc=r.headers.get('location');
+      if(!loc)throw Object.assign(new Error(`SharePoint respondió HTTP ${r.status} sin Location.`),{trace});
+      current=new URL(loc,current).toString();
+      continue;
+    }
+    return {response:r,jar,trace,finalUrl:current};
+  }
+  throw Object.assign(new Error('SharePoint excedió el límite de redirecciones.'),{trace});
+}
+
+async function downloadSource(env,{includeTrace=false}={}){
+  // Paso 1: abrir el vínculo anónimo como lo hace un navegador para obtener
+  // las cookies de invitado que SharePoint usa durante la cadena de redirecciones.
+  const jar=new Map();
+  const landing=await sharePointFetchWithCookieJar(sourceUrl(env,false),{jar});
+  const landingType=(landing.response.headers.get('content-type')||'').toLowerCase();
+
+  // Si el primer recorrido ya entrega el XLSX, úsalo directamente.
+  let r=landing.response;
+  let trace=[...landing.trace];
+  let finalUrl=landing.finalUrl;
+  let buffer=await r.arrayBuffer();
+  let bytes=new Uint8Array(buffer);
+
+  // Paso 2: normalmente el vínculo de compartir termina en una página HTML.
+  // Conservando las cookies recién obtenidas, pedimos la descarga del MISMO vínculo.
+  if(bytes.length<4 || bytes[0]!==0x50 || bytes[1]!==0x4b){
+    const dl=await sharePointFetchWithCookieJar(sourceUrl(env,true),{jar});
+    r=dl.response;
+    trace=trace.concat(dl.trace);
+    finalUrl=dl.finalUrl;
+    buffer=await r.arrayBuffer();
+    bytes=new Uint8Array(buffer);
+  }
+
+  if(!r.ok){
+    const err=new Error(`SharePoint respondió HTTP ${r.status}`);
+    err.trace=trace;
+    throw err;
+  }
+  if(bytes.length<4 || bytes[0]!==0x50 || bytes[1]!==0x4b){
+    const ct=r.headers.get('content-type')||landingType||'';
+    const err=new Error(`SharePoint respondió, pero no entregó un XLSX válido (${ct||'content-type desconocido'}).`);
+    err.trace=trace;
+    throw err;
+  }
+  return {
+    buffer,
+    contentType:r.headers.get('content-type')||'',
+    lastModified:r.headers.get('last-modified')||'',
+    etag:r.headers.get('etag')||'',
+    finalUrl,
+    ...(includeTrace?{trace}:null)
+  };
 }
 
 async function persistRanking(env, parsed, hash, meta){
@@ -320,9 +410,14 @@ async function sourceStatus(env){
 export default{
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==='/api/health')return json({ok:true,version:'0.2.0',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
+    if(url.pathname==='/api/health')return json({ok:true,version:'0.2.1',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
     if(url.pathname==='/api/score')return json(await getScore(env));
     if(url.pathname==='/api/sharepoint/status')return json(await sourceStatus(env));
+    if(url.pathname==='/api/sharepoint/diagnostic'){
+      if(!env.SHAREPOINT_FILE_URL)return json({ok:false,error:'Falta SHAREPOINT_FILE_URL'});
+      try{const {buffer,trace,contentType}=await downloadSource(env,{includeTrace:true});return json({ok:true,size:buffer.byteLength,contentType,trace});}
+      catch(e){return json({ok:false,error:e.message,trace:e.trace||[]},500);}
+    }
     if(url.pathname==='/api/sync'){
       if(request.method!=='POST')return json({ok:false,error:'Usa POST' },405);
       try{return json(await syncFromSharePoint(env,{force:true}));}
