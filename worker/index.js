@@ -573,13 +573,13 @@ async function sha256Text(value=''){
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 function authSecret(env){
-  return String(env.ADMIN_AUTH_SECRET||env.ADMIN_SETUP_CODE||'');
+  return String(env.ADMIN_AUTH_SECRET||env.SUPERADMIN_PASSWORD||'');
 }
 async function fastPasswordHash(env,password,saltValue=null){
   const secret=authSecret(env);
-  if(!secret)throw new Error('Falta ADMIN_SETUP_CODE o ADMIN_AUTH_SECRET en Cloudflare.');
+  if(!secret)throw new Error('Falta SUPERADMIN_PASSWORD o ADMIN_AUTH_SECRET en Cloudflare.');
   const salt=saltValue||randomToken(16);
-  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),'HMAC',{hash:'SHA-256'},false,['sign']);
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const data=new TextEncoder().encode(`${salt}:${String(password)}`);
   const signature=await crypto.subtle.sign('HMAC',key,data);
   return {hash:bytesToBase64Url(new Uint8Array(signature)),salt,iterations:0};
@@ -657,17 +657,22 @@ async function requireUser(request,env,roles=null){
   if(roles && !roles.includes(user.role))return {response:json({ok:false,error:'No tienes permisos para realizar esta acción.'},403),user};
   return {response:null,user};
 }
-async function bootstrapAdmin(request,env,body){
+function seedConfigured(env){
+  return !!(env.SUPERADMIN_EMAIL && env.SUPERADMIN_PASSWORD);
+}
+
+async function provisionSeedSuperadmin(env){
   await ensureSchema(env);
-  if(await authConfigured(env))return authResponse({ok:false,error:'El acceso administrativo ya está configurado.'},409);
-  if(!env.ADMIN_SETUP_CODE)return authResponse({ok:false,error:'Falta configurar ADMIN_SETUP_CODE en Cloudflare antes de activar el primer administrador.'},400);
-  if(String(body.setupCode||'')!==String(env.ADMIN_SETUP_CODE))return authResponse({ok:false,error:'Código de configuración incorrecto.'},403);
-  const email=String(body.email||'').trim().toLowerCase(),name=String(body.name||'').trim(),password=String(body.password||'');
-  if(!email.includes('@'))return authResponse({ok:false,error:'Ingresa un correo válido.'},400);
-  if(password.length<10)return authResponse({ok:false,error:'La contraseña debe tener al menos 10 caracteres.'},400);
+  if(await authConfigured(env))return null;
+  if(!seedConfigured(env))throw new Error('Faltan SUPERADMIN_EMAIL y/o SUPERADMIN_PASSWORD en Cloudflare.');
+  const email=String(env.SUPERADMIN_EMAIL).trim().toLowerCase();
+  const password=String(env.SUPERADMIN_PASSWORD);
+  if(!email.includes('@'))throw new Error('SUPERADMIN_EMAIL no es válido.');
+  if(password.length<10)throw new Error('SUPERADMIN_PASSWORD debe tener al menos 10 caracteres.');
   const ph=await fastPasswordHash(env,password);
-  const existing=await env.DB.prepare('SELECT id FROM admins WHERE email=?').bind(email).first();
+  const existing=await env.DB.prepare('SELECT id,name FROM admins WHERE email=? LIMIT 1').bind(email).first();
   const id=existing?.id||crypto.randomUUID();
+  const name=String(env.SUPERADMIN_NAME||existing?.name||email.split('@')[0]).trim();
   if(existing){
     await env.DB.prepare(`UPDATE admins SET name=?,role='superadmin',active=1,password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE id=?`)
       .bind(name||email,ph.hash,ph.salt,ph.iterations,nowIso(),id).run();
@@ -675,13 +680,18 @@ async function bootstrapAdmin(request,env,body){
     await env.DB.prepare(`INSERT INTO admins(id,email,name,role,active,password_hash,password_salt,password_iterations,updated_at) VALUES(?,?,?,?,1,?,?,?,?)`)
       .bind(id,email,name||email,'superadmin',ph.hash,ph.salt,ph.iterations,nowIso()).run();
   }
-  const user={id,email,name:name||email,role:'superadmin',active:true};
-  const session=await createSession(env,user,request);
-  return authResponse({ok:true,user},200,sessionCookie(session.token));
+  return {id,email,name:name||email,role:'superadmin',active:true};
 }
+
 async function loginAdmin(request,env,body){
   await ensureSchema(env);
   const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
+  if(!(await authConfigured(env))){
+    if(!seedConfigured(env))return authResponse({ok:false,error:'Falta configurar SUPERADMIN_EMAIL y SUPERADMIN_PASSWORD en Cloudflare.'},503);
+    if(email!==String(env.SUPERADMIN_EMAIL).trim().toLowerCase() || password!==String(env.SUPERADMIN_PASSWORD))
+      return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
+    await provisionSeedSuperadmin(env);
+  }
   const row=await env.DB.prepare('SELECT * FROM admins WHERE email=? AND active=1 LIMIT 1').bind(email).first();
   if(!row || !(await verifyPassword(env,password,row)))return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
   const user={id:row.id,email:row.email,name:row.name||row.email,role:row.role,active:true};
@@ -689,6 +699,7 @@ async function loginAdmin(request,env,body){
   await env.DB.prepare('UPDATE admins SET last_login_at=?,updated_at=? WHERE id=?').bind(nowIso(),nowIso(),row.id).run();
   return authResponse({ok:true,user},200,sessionCookie(session.token));
 }
+
 async function logoutAdmin(request,env){
   const cookies=parseCookieHeader(request.headers.get('cookie')||''),token=cookies[SESSION_COOKIE];
   if(token && env.DB){const tokenHash=await sha256Text(token);await env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash=?').bind(tokenHash).run();}
@@ -711,7 +722,7 @@ async function createAdmin(env,body){
   const role=['superadmin','admin','viewer'].includes(body.role)?body.role:'admin';
   const password=String(body.password||'');
   if(password.length<10)return {ok:false,error:'La contraseña temporal debe tener al menos 10 caracteres.'};
-  const id=crypto.randomUUID(),ph=await passwordHash(password);
+  const id=crypto.randomUUID(),ph=await fastPasswordHash(env,password);
   try{
     await env.DB.prepare(`INSERT INTO admins(id,email,name,role,active,password_hash,password_salt,password_iterations,updated_at)
       VALUES(?,?,?,?,1,?,?,?,?)`).bind(id,email,name||email,role,ph.hash,ph.salt,ph.iterations,nowIso()).run();
@@ -747,17 +758,13 @@ export default{
     const url=new URL(request.url),path=url.pathname;
     if(path==='/api/health'){
       await ensureSchema(env);
-      return json({ok:true,version:'0.5.2',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
+      return json({ok:true,version:'0.5.3',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
     }
     if(path==='/api/score')return json(await getScore(env));
 
     if(path==='/api/auth/status' && request.method==='GET'){
       if(!env.DB)return json({ok:false,error:'D1 no está conectada.'},500);
-      return json({ok:true,configured:await authConfigured(env),setupCodeConfigured:!!env.ADMIN_SETUP_CODE});
-    }
-    if(path==='/api/auth/bootstrap' && request.method==='POST'){
-      try{return await bootstrapAdmin(request,env,await readJson(request));}
-      catch(e){console.error('bootstrapAdmin failed',e);return authResponse({ok:false,error:`No se pudo activar la administración: ${e?.message||String(e)}`},500);}
+      return json({ok:true,configured:await authConfigured(env),seedConfigured:seedConfigured(env)});
     }
     if(path==='/api/auth/login' && request.method==='POST'){
       try{return await loginAdmin(request,env,await readJson(request));}
@@ -810,7 +817,7 @@ export default{
     if(path==='/api/admin/settings'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
       const overview=await adminOverview(env);
-      return json({ok:true,version:'0.5.2',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
+      return json({ok:true,version:'0.5.3',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
     }
     if(path==='/api/sharepoint/status'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;

@@ -11,7 +11,7 @@ const ASSETS={
 };
 const COLORS={yellow:'#ffd939',light:'#e9e9e9',navy:'#1c2a35',charcoal:'#333333',cream:'#f7f1e7',creamStrong:'#f2ead9',line:'#d5d7da',textSoft:'#6f7680',white:'#ffffff'};
 const root=document.getElementById('root');
-const state={data:{advisors:demo,topSeller:demo[0],updatedAt:new Date().toISOString(),sourceStatus:'demo'},adminCache:{},auth:{checked:false,authenticated:false,user:null,configured:false,setupCodeConfigured:false}};
+const state={data:{advisors:demo,topSeller:demo[0],updatedAt:new Date().toISOString(),sourceStatus:'demo'},adminCache:{},auth:{checked:false,authenticated:false,user:null,configured:false,seedConfigured:false}};
 const month=new Intl.DateTimeFormat('es-MX',{month:'long',year:'numeric'}).format(new Date()).replace(/^./,s=>s.toUpperCase());
 const monthUpper=month.toUpperCase();
 const TOP_SELLER_MESSAGE='Reconocemos tu liderazgo comercial, constancia y resultados extraordinarios durante este mes.';
@@ -85,7 +85,7 @@ async function refreshAuth(){
     const [status,me]=await Promise.all([fetchJson('/api/auth/status',false),fetchJson('/api/auth/me',false)]);
     state.auth.checked=true;
     state.auth.configured=!!status.configured;
-    state.auth.setupCodeConfigured=!!status.setupCodeConfigured;
+    state.auth.seedConfigured=!!status.seedConfigured;
     state.auth.authenticated=!!me.authenticated;
     state.auth.user=me.user||null;
   }catch{
@@ -94,24 +94,9 @@ async function refreshAuth(){
 }
 
 function authGateView(){
-  if(!state.auth.configured){
-    root.innerHTML=`<div class="auth-shell"><section class="auth-card">${brand()}<p class="eyebrow plain">PRIMER ACCESO</p><h1>Activar administración</h1><p>Configura el primer superadministrador del portal. Este paso solo aparece una vez.</p>${state.auth.setupCodeConfigured?'':`<div class="auth-warning"><strong>Falta un paso en Cloudflare.</strong><span>Crea un Secret llamado <code>ADMIN_SETUP_CODE</code> antes de continuar.</span></div>`}<form id="bootstrapForm" class="stack-form auth-form"><label>Nombre<input name="name" required autocomplete="name"></label><label>Correo<input name="email" type="email" required autocomplete="email"></label><label>Contraseña<input name="password" type="password" minlength="10" required autocomplete="new-password"></label><label>Confirmar contraseña<input name="confirmPassword" type="password" minlength="10" required autocomplete="new-password"></label><label>Código de configuración<input name="setupCode" type="password" required autocomplete="one-time-code"></label><button class="primary auth-primary" type="submit" ${state.auth.setupCodeConfigured?'':'disabled'}>Activar acceso</button><span id="authStatus"></span></form><button class="text-btn auth-back" data-nav="/">← Volver al ranking</button></section></div>`;
-    wireCommon();
-    document.getElementById('bootstrapForm')?.addEventListener('submit',bootstrapSubmit);
-    return;
-  }
-  root.innerHTML=`<div class="auth-shell"><section class="auth-card">${brand()}<p class="eyebrow plain">ACCESO ADMINISTRATIVO</p><h1>Iniciar sesión</h1><p>Ingresa con una cuenta autorizada para administrar MARNEZ Sales Score.</p><form id="loginForm" class="stack-form auth-form"><label>Correo<input name="email" type="email" required autocomplete="username"></label><label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label><button class="primary auth-primary" type="submit">Entrar al administrador</button><span id="authStatus"></span></form><button class="text-btn auth-back" data-nav="/">← Volver al ranking</button></section></div>`;
+  root.innerHTML=`<div class="auth-shell"><section class="auth-card">${brand()}<p class="eyebrow plain">ACCESO ADMINISTRATIVO</p><h1>Iniciar sesión</h1><p>Ingresa con una cuenta autorizada para administrar MARNEZ Sales Score.</p>${(!state.auth.configured&&!state.auth.seedConfigured)?`<div class="auth-warning"><strong>Falta configurar el acceso inicial en Cloudflare.</strong><span>Crea los secretos <code>SUPERADMIN_EMAIL</code> y <code>SUPERADMIN_PASSWORD</code>. No se requiere código de configuración.</span></div>`:''}<form id="loginForm" class="stack-form auth-form"><label>Correo<input name="email" type="email" required autocomplete="username"></label><label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label><button class="primary auth-primary" type="submit">Entrar al administrador</button><span id="authStatus"></span></form><button class="text-btn auth-back" data-nav="/">← Volver al ranking</button></section></div>`;
   wireCommon();
   document.getElementById('loginForm')?.addEventListener('submit',loginSubmit);
-}
-
-async function bootstrapSubmit(e){
-  e.preventDefault();const form=e.currentTarget,status=document.getElementById('authStatus'),fd=new FormData(form);
-  if(fd.get('password')!==fd.get('confirmPassword')){status.textContent='Las contraseñas no coinciden.';return;}
-  status.textContent='Activando acceso…';
-  const body={name:fd.get('name'),email:fd.get('email'),password:fd.get('password'),setupCode:fd.get('setupCode')};
-  try{const result=await fetchJson('/api/auth/bootstrap',true,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});state.auth.configured=true;state.auth.authenticated=true;state.auth.user=result.user;render();}
-  catch(err){status.textContent=err.message;}
 }
 
 async function loginSubmit(e){
