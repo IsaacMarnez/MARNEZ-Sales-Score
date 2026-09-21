@@ -7,7 +7,7 @@ directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "marnez-sales-score-db"
-# database_id = "TU_DATABASE_ID"
+[[d1_databases]]
+binding = "DB"
+database_name = "marnez-sales-score-db"
+database_id = "99190a2f-24e4-486d-8c73-65b472e5458e"
