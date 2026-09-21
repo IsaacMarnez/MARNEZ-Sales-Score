@@ -377,14 +377,101 @@ async function maybeSync(env){
   }
 }
 
-async function getScore(env){
-  if(!env.DB)return{month:new Date().toISOString().slice(0,7),updatedAt:nowIso(),sourceStatus:'demo',advisors:demo};
-  await maybeSync(env);
-  const rows=await env.DB.prepare(`SELECT id,name,sales,amount,photo_url AS photoUrl,previous_position AS previousPosition
+let schemaReady=false;
+async function ensureSchema(env){
+  if(schemaReady || !env.DB)return;
+
+  const advisorInfo=await env.DB.prepare('PRAGMA table_info(advisors)').all();
+  const advisorCols=new Set((advisorInfo.results||[]).map(x=>x.name));
+  const advisorAdditions=[
+    ['ranking_enabled','INTEGER NOT NULL DEFAULT 1'],
+    ['top_seller_eligible','INTEGER NOT NULL DEFAULT 1'],
+    ['public_visible','INTEGER NOT NULL DEFAULT 1'],
+    ['exclusion_reason','TEXT'],
+    ['display_name','TEXT']
+  ];
+  for(const [name,type] of advisorAdditions){
+    if(!advisorCols.has(name)){
+      try{await env.DB.prepare(`ALTER TABLE advisors ADD COLUMN ${name} ${type}`).run();}
+      catch(e){if(!String(e.message||e).toLowerCase().includes('duplicate column'))throw e;}
+    }
+  }
+
+  const adminInfo=await env.DB.prepare('PRAGMA table_info(admins)').all();
+  const adminCols=new Set((adminInfo.results||[]).map(x=>x.name));
+  const adminAdditions=[
+    ['password_hash','TEXT'],
+    ['password_salt','TEXT'],
+    ['password_iterations','INTEGER'],
+    ['last_login_at','TEXT'],
+    ['updated_at','TEXT']
+  ];
+  for(const [name,type] of adminAdditions){
+    if(!adminCols.has(name)){
+      try{await env.DB.prepare(`ALTER TABLE admins ADD COLUMN ${name} ${type}`).run();}
+      catch(e){if(!String(e.message||e).toLowerCase().includes('duplicate column'))throw e;}
+    }
+  }
+
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions (
+    id TEXT PRIMARY KEY,
+    admin_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    user_agent TEXT,
+    FOREIGN KEY(admin_id) REFERENCES admins(id)
+  )`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions(token_hash)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at)').run();
+
+  schemaReady=true;
+}
+
+function mapAdvisorRow(x){
+  return {
+    id:x.id,
+    name:x.displayName||x.name,
+    sourceName:x.name,
+    sales:Number(x.sales||0),
+    amount:Number(x.amount||0),
+    photoUrl:x.photoUrl||null,
+    previousPosition:x.previousPosition==null?null:Number(x.previousPosition),
+    rankingEnabled:Number(x.rankingEnabled??1)===1,
+    topSellerEligible:Number(x.topSellerEligible??1)===1,
+    publicVisible:Number(x.publicVisible??1)===1,
+    exclusionReason:x.exclusionReason||''
+  };
+}
+
+async function allActiveAdvisors(env){
+  await ensureSchema(env);
+  const rows=await env.DB.prepare(`SELECT id,name,display_name AS displayName,sales,amount,photo_url AS photoUrl,
+    previous_position AS previousPosition,ranking_enabled AS rankingEnabled,
+    top_seller_eligible AS topSellerEligible,public_visible AS publicVisible,
+    exclusion_reason AS exclusionReason
     FROM advisors WHERE active=1 ORDER BY sales DESC,amount DESC,name ASC`).all();
+  return (rows.results||[]).map(mapAdvisorRow).map((a,i)=>({...a,actualPosition:i+1}));
+}
+
+function publicRankingFrom(all){
+  const eligible=all.filter(a=>a.publicVisible && a.rankingEnabled);
+  return eligible.map((a,i)=>({...a,publicPosition:i+1}));
+}
+
+function recognizedTopSeller(publicRank){
+  return publicRank.find(a=>a.topSellerEligible)||null;
+}
+
+async function getScore(env){
+  if(!env.DB)return{month:new Date().toISOString().slice(0,7),updatedAt:nowIso(),sourceStatus:'demo',advisors:demo,topSeller:demo[0]};
+  await ensureSchema(env);
+  await maybeSync(env);
+  const all=await allActiveAdvisors(env);
+  const publicRank=publicRankingFrom(all);
   const updatedAt=await getSetting(env,'last_sync_at')||nowIso();
   const syncError=await getSetting(env,'last_sync_error');
-  const sourceStatus=rows.results?.length?(syncError?'warning':'synced'):'demo';
+  const sourceStatus=all.length?(syncError?'warning':'synced'):'demo';
   return {
     month:new Date().toISOString().slice(0,7),updatedAt,sourceStatus,
     sourceMeta:{
@@ -394,11 +481,13 @@ async function getScore(env){
       monthFilter:await getSetting(env,'month_filter'),
       error:syncError||null
     },
-    advisors:rows.results?.length?rows.results:demo
+    advisors:publicRank.length?publicRank:[],
+    topSeller:recognizedTopSeller(publicRank)
   };
 }
 
 async function sourceStatus(env){
+  await ensureSchema(env);
   const base={configured:!!env.SHAREPOINT_FILE_URL,lastSyncAt:await getSetting(env,'last_sync_at'),lastError:await getSetting(env,'last_sync_error')};
   if(!env.SHAREPOINT_FILE_URL)return {ok:false,...base,error:'Falta SHAREPOINT_FILE_URL'};
   try{
@@ -407,25 +496,349 @@ async function sourceStatus(env){
   }catch(e){return {ok:false,...base,error:e.message};}
 }
 
+async function adminOverview(env){
+  const all=await allActiveAdvisors(env);
+  const publicRank=publicRankingFrom(all);
+  return {
+    ok:true,
+    realRanking:all,
+    publicRanking:publicRank,
+    realLeader:all[0]||null,
+    topSeller:recognizedTopSeller(publicRank),
+    totals:{sales:all.reduce((s,a)=>s+a.sales,0),advisors:all.length,publicAdvisors:publicRank.length},
+    source:{
+      lastSyncAt:await getSetting(env,'last_sync_at'),
+      lastError:await getSetting(env,'last_sync_error'),
+      sheet:await getSetting(env,'source_sheet'),
+      rows:Number(await getSetting(env,'source_rows')||0),
+      usedRows:Number(await getSetting(env,'source_used_rows')||0),
+      monthFilter:await getSetting(env,'month_filter')
+    }
+  };
+}
+
+async function updateAdvisor(env,id,body){
+  await ensureSchema(env);
+  const current=await env.DB.prepare('SELECT * FROM advisors WHERE id=?').bind(id).first();
+  if(!current)return {ok:false,error:'Asesor no encontrado'};
+  const rankingEnabled=body.rankingEnabled==null?Number(current.ranking_enabled??1):(body.rankingEnabled?1:0);
+  const topSellerEligible=body.topSellerEligible==null?Number(current.top_seller_eligible??1):(body.topSellerEligible?1:0);
+  const publicVisible=body.publicVisible==null?Number(current.public_visible??1):(body.publicVisible?1:0);
+  const displayName=body.displayName===undefined?current.display_name:String(body.displayName||'').trim()||null;
+  const photoUrl=body.photoUrl===undefined?current.photo_url:String(body.photoUrl||'').trim()||null;
+  const exclusionReason=body.exclusionReason===undefined?current.exclusion_reason:String(body.exclusionReason||'').trim()||null;
+  await env.DB.prepare(`UPDATE advisors SET ranking_enabled=?,top_seller_eligible=?,public_visible=?,display_name=?,photo_url=?,exclusion_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .bind(rankingEnabled,topSellerEligible,publicVisible,displayName,photoUrl,exclusionReason,id).run();
+  const row=await env.DB.prepare(`SELECT id,name,display_name AS displayName,sales,amount,photo_url AS photoUrl,previous_position AS previousPosition,
+      ranking_enabled AS rankingEnabled,top_seller_eligible AS topSellerEligible,public_visible AS publicVisible,exclusion_reason AS exclusionReason
+      FROM advisors WHERE id=?`).bind(id).first();
+  return {ok:true,advisor:mapAdvisorRow(row)};
+}
+
+async function historyData(env){
+  await ensureSchema(env);
+  const rows=await env.DB.prepare(`SELECT r.month,r.position,r.sales,r.amount,r.captured_at AS capturedAt,
+      a.id AS advisorId,COALESCE(NULLIF(a.display_name,''),a.name) AS advisorName
+      FROM monthly_rankings r LEFT JOIN advisors a ON a.id=r.advisor_id
+      ORDER BY r.month DESC,r.position ASC`).all();
+  const groups={};
+  for(const row of rows.results||[]){
+    (groups[row.month]??=[]).push({advisorId:row.advisorId,advisorName:row.advisorName||row.advisorId,position:Number(row.position),sales:Number(row.sales),amount:Number(row.amount||0),capturedAt:row.capturedAt});
+  }
+  return {ok:true,months:Object.entries(groups).map(([month,ranking])=>({month,ranking}))};
+}
+
+
+const SESSION_COOKIE='marnez_admin_session';
+const SESSION_SECONDS=60*60*12;
+const LEGACY_PASSWORD_ITERATIONS=120000;
+
+function bytesToBase64Url(bytes){
+  let binary='';
+  for(const b of bytes)binary+=String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function base64UrlToBytes(value=''){
+  let s=String(value).replace(/-/g,'+').replace(/_/g,'/');
+  while(s.length%4)s+='=';
+  const binary=atob(s);
+  return Uint8Array.from(binary,c=>c.charCodeAt(0));
+}
+function randomToken(byteLength=32){
+  const bytes=new Uint8Array(byteLength);crypto.getRandomValues(bytes);return bytesToBase64Url(bytes);
+}
+async function sha256Text(value=''){
+  const bytes=new TextEncoder().encode(String(value));
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function authSecret(env){
+  return String(env.ADMIN_AUTH_SECRET||env.SUPERADMIN_PASSWORD||'');
+}
+async function fastPasswordHash(env,password,saltValue=null){
+  const secret=authSecret(env);
+  if(!secret)throw new Error('Falta SUPERADMIN_PASSWORD o ADMIN_AUTH_SECRET en Cloudflare.');
+  const salt=saltValue||randomToken(16);
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const data=new TextEncoder().encode(`${salt}:${String(password)}`);
+  const signature=await crypto.subtle.sign('HMAC',key,data);
+  return {hash:bytesToBase64Url(new Uint8Array(signature)),salt,iterations:0};
+}
+async function legacyPasswordHash(password,saltValue,iterations=LEGACY_PASSWORD_ITERATIONS){
+  const salt=base64UrlToBytes(saltValue);
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt,iterations},key,256);
+  return bytesToBase64Url(new Uint8Array(bits));
+}
+function safeEqualBase64Url(a,b){
+  try{
+    const aa=base64UrlToBytes(a),bb=base64UrlToBytes(b);
+    if(aa.length!==bb.length)return false;
+    if(typeof crypto.subtle.timingSafeEqual==='function')return crypto.subtle.timingSafeEqual(aa,bb);
+    let diff=0;for(let i=0;i<aa.length;i++)diff|=aa[i]^bb[i];return diff===0;
+  }catch{return false;}
+}
+async function verifyPassword(env,password,row){
+  if(!row?.password_hash||!row?.password_salt)return false;
+  const iterations=Number(row.password_iterations||0);
+  if(iterations>0){
+    const hash=await legacyPasswordHash(password,row.password_salt,iterations);
+    return safeEqualBase64Url(hash,row.password_hash);
+  }
+  const result=await fastPasswordHash(env,password,row.password_salt);
+  return safeEqualBase64Url(result.hash,row.password_hash);
+}
+function parseCookieHeader(value=''){
+  const out={};
+  for(const part of String(value||'').split(';')){
+    const i=part.indexOf('=');if(i<=0)continue;
+    out[part.slice(0,i).trim()]=decodeURIComponent(part.slice(i+1).trim());
+  }
+  return out;
+}
+function sessionCookie(token,maxAge=SESSION_SECONDS){
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+function expiredSessionCookie(){return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;}
+function authResponse(body,status=200,cookie=null){
+  const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store'};
+  if(cookie)headers['set-cookie']=cookie;
+  return new Response(JSON.stringify(body),{status,headers});
+}
+async function authConfigured(env){
+  await ensureSchema(env);
+  const row=await env.DB.prepare(`SELECT COUNT(*) AS count FROM admins WHERE active=1 AND password_hash IS NOT NULL AND password_hash<>''`).first();
+  return Number(row?.count||0)>0;
+}
+async function createSession(env,admin,request){
+  await ensureSchema(env);
+  const token=randomToken(32),tokenHash=await sha256Text(token),id=crypto.randomUUID();
+  const created=new Date(),expires=new Date(created.getTime()+SESSION_SECONDS*1000);
+  await env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at<=?').bind(created.toISOString()).run();
+  await env.DB.prepare('INSERT INTO admin_sessions(id,admin_id,token_hash,created_at,expires_at,user_agent) VALUES(?,?,?,?,?,?)')
+    .bind(id,admin.id,tokenHash,created.toISOString(),expires.toISOString(),request.headers.get('user-agent')||'').run();
+  return {token,expiresAt:expires.toISOString()};
+}
+async function getSessionUser(request,env){
+  if(!env.DB)return null;
+  await ensureSchema(env);
+  const cookies=parseCookieHeader(request.headers.get('cookie')||'');
+  const token=cookies[SESSION_COOKIE];if(!token)return null;
+  const tokenHash=await sha256Text(token),now=nowIso();
+  const row=await env.DB.prepare(`SELECT a.id,a.email,a.name,a.role,a.active,s.expires_at AS expiresAt
+    FROM admin_sessions s JOIN admins a ON a.id=s.admin_id
+    WHERE s.token_hash=? AND s.expires_at>? AND a.active=1 LIMIT 1`).bind(tokenHash,now).first();
+  if(!row)return null;
+  return {id:row.id,email:row.email,name:row.name||row.email,role:row.role,active:Number(row.active)===1,expiresAt:row.expiresAt};
+}
+async function requireUser(request,env,roles=null){
+  const user=await getSessionUser(request,env);
+  if(!user)return {response:json({ok:false,error:'Inicia sesión para continuar.'},401),user:null};
+  if(roles && !roles.includes(user.role))return {response:json({ok:false,error:'No tienes permisos para realizar esta acción.'},403),user};
+  return {response:null,user};
+}
+function seedConfigured(env){
+  return !!(env.SUPERADMIN_EMAIL && env.SUPERADMIN_PASSWORD);
+}
+
+async function provisionSeedSuperadmin(env){
+  await ensureSchema(env);
+  if(await authConfigured(env))return null;
+  if(!seedConfigured(env))throw new Error('Faltan SUPERADMIN_EMAIL y/o SUPERADMIN_PASSWORD en Cloudflare.');
+  const email=String(env.SUPERADMIN_EMAIL).trim().toLowerCase();
+  const password=String(env.SUPERADMIN_PASSWORD);
+  if(!email.includes('@'))throw new Error('SUPERADMIN_EMAIL no es válido.');
+  if(password.length<10)throw new Error('SUPERADMIN_PASSWORD debe tener al menos 10 caracteres.');
+  const ph=await fastPasswordHash(env,password);
+  const existing=await env.DB.prepare('SELECT id,name FROM admins WHERE email=? LIMIT 1').bind(email).first();
+  const id=existing?.id||crypto.randomUUID();
+  const name=String(env.SUPERADMIN_NAME||existing?.name||email.split('@')[0]).trim();
+  if(existing){
+    await env.DB.prepare(`UPDATE admins SET name=?,role='superadmin',active=1,password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE id=?`)
+      .bind(name||email,ph.hash,ph.salt,ph.iterations,nowIso(),id).run();
+  }else{
+    await env.DB.prepare(`INSERT INTO admins(id,email,name,role,active,password_hash,password_salt,password_iterations,updated_at) VALUES(?,?,?,?,1,?,?,?,?)`)
+      .bind(id,email,name||email,'superadmin',ph.hash,ph.salt,ph.iterations,nowIso()).run();
+  }
+  return {id,email,name:name||email,role:'superadmin',active:true};
+}
+
+async function loginAdmin(request,env,body){
+  await ensureSchema(env);
+  const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
+  if(!(await authConfigured(env))){
+    if(!seedConfigured(env))return authResponse({ok:false,error:'Falta configurar SUPERADMIN_EMAIL y SUPERADMIN_PASSWORD en Cloudflare.'},503);
+    if(email!==String(env.SUPERADMIN_EMAIL).trim().toLowerCase() || password!==String(env.SUPERADMIN_PASSWORD))
+      return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
+    await provisionSeedSuperadmin(env);
+  }
+  const row=await env.DB.prepare('SELECT * FROM admins WHERE email=? AND active=1 LIMIT 1').bind(email).first();
+  if(!row || !(await verifyPassword(env,password,row)))return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
+  const user={id:row.id,email:row.email,name:row.name||row.email,role:row.role,active:true};
+  const session=await createSession(env,user,request);
+  await env.DB.prepare('UPDATE admins SET last_login_at=?,updated_at=? WHERE id=?').bind(nowIso(),nowIso(),row.id).run();
+  return authResponse({ok:true,user},200,sessionCookie(session.token));
+}
+
+async function logoutAdmin(request,env){
+  const cookies=parseCookieHeader(request.headers.get('cookie')||''),token=cookies[SESSION_COOKIE];
+  if(token && env.DB){const tokenHash=await sha256Text(token);await env.DB.prepare('DELETE FROM admin_sessions WHERE token_hash=?').bind(tokenHash).run();}
+  return authResponse({ok:true},200,expiredSessionCookie());
+}
+
+async function listAdmins(env){
+  await ensureSchema(env);
+  const rows=await env.DB.prepare(`SELECT id,email,name,role,active,created_at AS createdAt,last_login_at AS lastLoginAt,
+    CASE WHEN password_hash IS NOT NULL AND password_hash<>'' THEN 1 ELSE 0 END AS hasPassword
+    FROM admins ORDER BY active DESC,name ASC,email ASC`).all();
+  return {ok:true,users:(rows.results||[]).map(x=>({...x,active:Number(x.active)===1,hasPassword:Number(x.hasPassword)===1}))};
+}
+
+async function createAdmin(env,body){
+  await ensureSchema(env);
+  const email=String(body.email||'').trim().toLowerCase();
+  if(!email || !email.includes('@'))return {ok:false,error:'Ingresa un correo válido.'};
+  const name=String(body.name||'').trim();
+  const role=['superadmin','admin','viewer'].includes(body.role)?body.role:'admin';
+  const password=String(body.password||'');
+  if(password.length<10)return {ok:false,error:'La contraseña temporal debe tener al menos 10 caracteres.'};
+  const id=crypto.randomUUID(),ph=await fastPasswordHash(env,password);
+  try{
+    await env.DB.prepare(`INSERT INTO admins(id,email,name,role,active,password_hash,password_salt,password_iterations,updated_at)
+      VALUES(?,?,?,?,1,?,?,?,?)`).bind(id,email,name||email,role,ph.hash,ph.salt,ph.iterations,nowIso()).run();
+    return {ok:true,user:{id,email,name:name||email,role,active:true,hasPassword:true}};
+  }catch(e){return {ok:false,error:String(e.message||e).includes('UNIQUE')?'Ese correo ya está registrado.':String(e.message||e)};}
+}
+
+async function updateAdmin(env,id,body){
+  await ensureSchema(env);
+  const current=await env.DB.prepare('SELECT * FROM admins WHERE id=?').bind(id).first();
+  if(!current)return {ok:false,error:'Usuario no encontrado'};
+  const role=body.role===undefined?current.role:(['superadmin','admin','viewer'].includes(body.role)?body.role:current.role);
+  const active=body.active===undefined?Number(current.active):(body.active?1:0);
+  const name=body.name===undefined?current.name:String(body.name||'').trim();
+  let passwordHashValue=current.password_hash,passwordSalt=current.password_salt,passwordIterations=current.password_iterations;
+  const password=String(body.password||'');
+  if(password){
+    if(password.length<10)return {ok:false,error:'La nueva contraseña debe tener al menos 10 caracteres.'};
+    const ph=await fastPasswordHash(env,password);passwordHashValue=ph.hash;passwordSalt=ph.salt;passwordIterations=ph.iterations;
+    await env.DB.prepare('DELETE FROM admin_sessions WHERE admin_id=?').bind(id).run();
+  }
+  await env.DB.prepare(`UPDATE admins SET name=?,role=?,active=?,password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE id=?`)
+    .bind(name,role,active,passwordHashValue,passwordSalt,passwordIterations,nowIso(),id).run();
+  return {ok:true};
+}
+
+async function readJson(request){
+  try{return await request.json();}catch{return {};}
+}
+
 export default{
   async fetch(request,env){
-    const url=new URL(request.url);
-    if(url.pathname==='/api/health')return json({ok:true,version:'0.2.1',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
-    if(url.pathname==='/api/score')return json(await getScore(env));
-    if(url.pathname==='/api/sharepoint/status')return json(await sourceStatus(env));
-    if(url.pathname==='/api/sharepoint/diagnostic'){
+    const url=new URL(request.url),path=url.pathname;
+    if(path==='/api/health'){
+      await ensureSchema(env);
+      return json({ok:true,version:'0.6.5',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
+    }
+    if(path==='/api/score')return json(await getScore(env));
+
+    if(path==='/api/auth/status' && request.method==='GET'){
+      if(!env.DB)return json({ok:false,error:'D1 no está conectada.'},500);
+      return json({ok:true,configured:await authConfigured(env),seedConfigured:seedConfigured(env)});
+    }
+    if(path==='/api/auth/login' && request.method==='POST'){
+      try{return await loginAdmin(request,env,await readJson(request));}
+      catch(e){console.error('loginAdmin failed',e);return authResponse({ok:false,error:`No se pudo iniciar sesión: ${e?.message||String(e)}`},500);}
+    }
+    if(path==='/api/auth/logout' && request.method==='POST')return logoutAdmin(request,env);
+    if(path==='/api/auth/me' && request.method==='GET'){
+      const user=await getSessionUser(request,env);
+      return json({ok:true,authenticated:!!user,user:user||null});
+    }
+
+    if(path==='/api/admin/overview'){
+      const auth=await requireUser(request,env);if(auth.response)return auth.response;
+      return json(await adminOverview(env));
+    }
+    if(path==='/api/admin/advisors' && request.method==='GET'){
+      const auth=await requireUser(request,env);if(auth.response)return auth.response;
+      return json({ok:true,advisors:await allActiveAdvisors(env)});
+    }
+    if(path.startsWith('/api/admin/advisors/') && request.method==='PATCH'){
+      const auth=await requireUser(request,env,['superadmin','admin']);if(auth.response)return auth.response;
+      const id=decodeURIComponent(path.slice('/api/admin/advisors/'.length));
+      const result=await updateAdvisor(env,id,await readJson(request));
+      return json(result,result.ok?200:404);
+    }
+    if(path==='/api/admin/history'){
+      const auth=await requireUser(request,env);if(auth.response)return auth.response;
+      return json(await historyData(env));
+    }
+    if(path==='/api/admin/users' && request.method==='GET'){
+      const auth=await requireUser(request,env,['superadmin']);if(auth.response)return auth.response;
+      return json(await listAdmins(env));
+    }
+    if(path==='/api/admin/users' && request.method==='POST'){
+      const auth=await requireUser(request,env,['superadmin']);if(auth.response)return auth.response;
+      const result=await createAdmin(env,await readJson(request));
+      return json(result,result.ok?200:400);
+    }
+    if(path.startsWith('/api/admin/users/') && request.method==='PATCH'){
+      const auth=await requireUser(request,env,['superadmin']);if(auth.response)return auth.response;
+      const id=decodeURIComponent(path.slice('/api/admin/users/'.length));
+      if(id===auth.user.id){
+        const body=await readJson(request);
+        if(body.active===false || (body.role && body.role!=='superadmin'))return json({ok:false,error:'No puedes desactivar o quitar tu propio rol de superadministrador.'},400);
+        const result=await updateAdmin(env,id,body);return json(result,result.ok?200:404);
+      }
+      const result=await updateAdmin(env,id,await readJson(request));
+      return json(result,result.ok?200:404);
+    }
+    if(path==='/api/admin/settings'){
+      const auth=await requireUser(request,env);if(auth.response)return auth.response;
+      const overview=await adminOverview(env);
+      return json({ok:true,version:'0.6.5',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
+    }
+    if(path==='/api/sharepoint/status'){
+      const auth=await requireUser(request,env);if(auth.response)return auth.response;
+      return json(await sourceStatus(env));
+    }
+    if(path==='/api/sharepoint/diagnostic'){
+      const auth=await requireUser(request,env,['superadmin','admin']);if(auth.response)return auth.response;
       if(!env.SHAREPOINT_FILE_URL)return json({ok:false,error:'Falta SHAREPOINT_FILE_URL'});
       try{const {buffer,trace,contentType}=await downloadSource(env,{includeTrace:true});return json({ok:true,size:buffer.byteLength,contentType,trace});}
       catch(e){return json({ok:false,error:e.message,trace:e.trace||[]},500);}
     }
-    if(url.pathname==='/api/sync'){
-      if(request.method!=='POST')return json({ok:false,error:'Usa POST' },405);
+    if(path==='/api/sync' && request.method==='POST'){
+      const auth=await requireUser(request,env,['superadmin','admin']);if(auth.response)return auth.response;
       try{return json(await syncFromSharePoint(env,{force:true}));}
       catch(e){await setSetting(env,'last_sync_error',e.message);return json({ok:false,error:e.message},500);}
     }
     return env.ASSETS.fetch(request);
   },
-  async scheduled(_event,env,ctx){
-    ctx.waitUntil(syncFromSharePoint(env).catch(e=>setSetting(env,'last_sync_error',e.message)));
+  async scheduled(event,env,ctx){
+    ctx.waitUntil((async()=>{
+      try{await ensureSchema(env);await syncFromSharePoint(env);}catch(e){if(env.DB)await setSetting(env,'last_sync_error',e.message);}
+    })());
   }
 };
