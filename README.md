@@ -1,72 +1,87 @@
-# MARNEZ Sales Score · V0.4.0
+# MARNEZ Sales Score · V0.5.0
 
-Portal de ranking comercial conectado a D1 y preparado para sincronizar el Excel original de SharePoint.
+Versión con acceso administrativo protegido, roles reales y reconocimiento Top Seller premium.
 
-## Novedades V0.3.0
-- Administrador con navegación funcional: Dashboard, Asesores, Top Seller, Historial, Usuarios y Configuración.
-- Separación entre **ranking real** y **ranking público**.
-- Las ventas del Excel nunca se alteran para modificar el reconocimiento.
-- Por asesor se puede configurar:
-  - Participa en ranking: Sí / No.
-  - Elegible para Top Seller: Sí / No.
-  - Mostrar en portal público: Sí / No.
-  - Nombre visible.
-  - URL de fotografía.
-  - Motivo o nota interna de exclusión.
-- El Top Seller público se calcula solo entre asesores elegibles.
-- Las preferencias administrativas permanecen en D1 aunque el Excel vuelva a sincronizarse.
-- Vista previa, animación y descarga PNG del Top Seller.
-- Historial mensual basado en `monthly_rankings`.
-- Registro de usuarios y roles en D1.
-- El Worker crea automáticamente las nuevas columnas de V0.3.0 si aún no existen.
+## Novedades V0.5.0
 
-## Caso Diana / Coordinación
-En Administrador → Asesores, desactiva:
-- `Participa en ranking`
-- `Elegible para Top Seller`
+- Login real para `/admin` con sesión segura mediante cookie `HttpOnly`.
+- El botón **Administrador** no aparece en la vista pública si no existe una sesión administrativa iniciada.
+- Si alguien escribe `/admin` directamente sin sesión, verá únicamente la pantalla de login.
+- Roles aplicados en backend y frontend:
+  - **Superadministrador:** todo el panel, incluyendo Usuarios.
+  - **Administrador:** dashboard, asesores, Top Seller, historial, configuración y sincronización.
+  - **Visualizador:** consulta administrativa en modo solo lectura.
+- Contraseñas protegidas con PBKDF2-SHA256 y salt individual; no se almacenan en texto plano.
+- Sesiones administrativas almacenadas en D1 y con expiración.
+- Primer acceso protegido mediante un Secret de Cloudflare llamado `ADMIN_SETUP_CODE`.
+- El diploma Top Seller fue refinado a fondo blanco con detalles dorados, sin firma y mostrando el número de ventas.
+- Frase del diploma: **“Tu constancia, enfoque y dedicación convierten el esfuerzo en resultados extraordinarios.”**
 
-Las ventas de Diana seguirán apareciendo en el **Ranking real** del administrador, pero no ocupará una posición en el ranking público ni recibirá el reconocimiento Top Seller.
+## Antes de publicar
 
-## Importante sobre Usuarios
-La V0.3.0 permite registrar usuarios y roles (`superadmin`, `admin`, `viewer`) en D1. La autenticación/login y la aplicación efectiva de permisos por usuario todavía no están activadas; esa capa debe añadirse antes de considerar el panel administrador protegido.
+Mantén los valores existentes:
 
-## Variables de Cloudflare
-Mantener `SHAREPOINT_FILE_URL` como Secret/Variable de runtime en Cloudflare. No guardar el vínculo compartido en GitHub.
+- binding D1: `DB`
+- Secret/variable: `SHAREPOINT_FILE_URL`
 
-## D1
-Binding esperado:
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "marnez-sales-score-db"
-database_id = "99190a2F-24E4-486D-8C73-65B472E5458E"
-```
+Y crea un nuevo **Secret** en Cloudflare:
 
-El archivo `migrations/0002_advisor_ranking_controls.sql` documenta las columnas nuevas. No es obligatorio ejecutarlo manualmente porque el Worker valida y agrega las columnas faltantes al iniciar.
-
-## Endpoints nuevos
-- `GET /api/admin/overview`
-- `GET /api/admin/advisors`
-- `PATCH /api/admin/advisors/:id`
-- `GET /api/admin/history`
-- `GET /api/admin/users`
-- `POST /api/admin/users`
-- `PATCH /api/admin/users/:id`
-- `GET /api/admin/settings`
-
-## Verificación
-Después del despliegue:
 ```text
-/api/health
+ADMIN_SETUP_CODE
 ```
-Debe indicar:
+
+El valor lo eliges tú. Usa una frase o código largo que solo conozca quien configurará el primer Superadministrador. No lo guardes en GitHub.
+
+## Primer acceso administrativo
+
+Después del despliegue:
+
+1. Abre `/api/health` y confirma:
+
 ```json
-{"ok":true,"version":"0.3.0","d1":true,"sharepointConfigured":true}
+{
+  "ok": true,
+  "version": "0.5.0",
+  "d1": true,
+  "sharepointConfigured": true,
+  "authConfigured": false
+}
 ```
 
+2. Abre `/admin`.
+3. Aparecerá **Activar administración**.
+4. Captura nombre, correo, contraseña y el valor de `ADMIN_SETUP_CODE`.
+5. Esa cuenta se convertirá en el primer **Superadministrador**.
+6. A partir de ese momento `/admin` mostrará login cuando no haya sesión.
 
-## Novedades V0.4.0
-- Reconocimiento Top Seller rediseñado con composición premium.
-- Descarga del reconocimiento en PNG con mejor distribución visual.
-- Nuevo diploma institucional en PNG con leyenda “Top Seller del Mes”.
-- Frase motivadora integrada en reconocimiento y diploma.
+## Crear otros administradores
+
+El Superadministrador entra a **Usuarios** y crea cada cuenta con:
+
+- nombre
+- correo
+- contraseña inicial
+- rol
+
+También puede restablecer la contraseña desde el mismo apartado.
+
+## Seguridad
+
+Las rutas `/api/admin/*`, sincronización y diagnóstico de SharePoint están protegidas en el Worker. Ocultar botones en el frontend no es la única protección: el backend valida la sesión y el rol antes de entregar o modificar datos administrativos.
+
+## Base D1
+
+La V0.5.0 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
+
+## Top Seller y diploma
+
+La vista pública mantiene:
+
+- ranking
+- Top 3
+- Top Seller
+- reconocimiento animado
+- descarga del reconocimiento PNG
+- descarga del diploma PNG
+
+El diploma tiene fondo blanco, detalles dorados, identidad MARNEZ y muestra las ventas del asesor. No incluye firma.

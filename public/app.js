@@ -11,11 +11,11 @@ const ASSETS={
 };
 const COLORS={yellow:'#ffd939',light:'#e9e9e9',navy:'#1c2a35',charcoal:'#333333',cream:'#f7f1e7',creamStrong:'#f2ead9',line:'#d5d7da',textSoft:'#6f7680',white:'#ffffff'};
 const root=document.getElementById('root');
-const state={data:{advisors:demo,topSeller:demo[0],updatedAt:new Date().toISOString(),sourceStatus:'demo'},adminCache:{}};
+const state={data:{advisors:demo,topSeller:demo[0],updatedAt:new Date().toISOString(),sourceStatus:'demo'},adminCache:{},auth:{checked:false,authenticated:false,user:null,configured:false,setupCodeConfigured:false}};
 const month=new Intl.DateTimeFormat('es-MX',{month:'long',year:'numeric'}).format(new Date()).replace(/^./,s=>s.toUpperCase());
 const monthUpper=month.toUpperCase();
 const TOP_SELLER_MESSAGE='Reconocemos tu liderazgo comercial, constancia y resultados extraordinarios durante este mes.';
-const DIPLOMA_MOTIVATION='Tu esfuerzo, disciplina y constancia inspiran grandes resultados.';
+const DIPLOMA_MOTIVATION='Tu constancia, enfoque y dedicación convierten el esfuerzo en resultados extraordinarios.';
 const esc=(s='')=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const initials=n=>String(n||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
 const money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n||0));
@@ -43,7 +43,7 @@ function publicView(){
   const advisors=state.data.advisors||[];
   const top=state.data.topSeller||null;
   root.innerHTML=`<div class="site-shell">
-    <header class="public-header">${brand()}<div class="header-actions"><span class="live"><i></i> EN VIVO</span><button class="text-btn" data-nav="/admin">Administrador</button></div></header>
+    <header class="public-header">${brand()}<div class="header-actions"><span class="live"><i></i> EN VIVO</span>${state.auth.authenticated?'<button class="text-btn" data-nav="/admin">Administrador</button>':''}</div></header>
     <main class="public-main">
       <div class="hero-copy"><p class="eyebrow plain">RANKING DE VENTAS · ${monthUpper}</p><h1>Resultados que<br><span>se reconocen.</span></h1><p>Score en vivo para visualizar el desempeño comercial, destacar al Top Seller del mes y compartir su reconocimiento en PNG.</p></div>
       ${top?`<section class="top-card top-card-premium"><div class="top-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="top-glow"></div><div class="top-card-grid"><div class="top-copy-zone"><div class="eyebrow">TOP SELLER · ${monthUpper}</div><p class="muted">Reconocimiento del mes</p><h1>${esc(top.name)}</h1><p class="top-copy">${TOP_SELLER_MESSAGE}</p><div class="top-stats"><div><strong>${top.sales}</strong><span>Ventas</span></div>${top.amount?`<div><strong>${money(top.amount)}</strong><span>Monto</span></div>`:''}</div><div class="cta-row"><button class="primary" data-celebrate>★ Mostrar reconocimiento</button><button class="secondary secondary-dark" data-download-top>⬇ Reconocimiento PNG</button><button class="secondary secondary-dark" data-download-diploma>⬇ Diploma PNG</button></div></div><div class="top-photo-zone"><div class="top-photo-frame">${avatar(top,true)}</div><div class="top-award-badge"><span>01</span><small>TOP SELLER</small></div></div></div></section>`:`<section class="panel empty-panel"><h2>Top Seller pendiente</h2><p>No hay asesores elegibles para reconocimiento. Puedes configurarlos desde Administrador → Asesores.</p></section>`}
@@ -64,8 +64,12 @@ const navItems=[
 ];
 
 function sidebar(active){
-  return `<aside class="sidebar">${brand('compact')}<nav>${navItems.map(([id,icon,label,path])=>`<button class="${id===active?'active':''}" data-nav="${path}">${icon} ${label}</button>`).join('')}</nav><div class="sidebar-card"><p class="eyebrow">RANKING PÚBLICO</p><p>Las ventas reales se conservan. Desde Asesores decides quién participa en el ranking y quién puede recibir Top Seller.</p></div><button class="ghost" data-nav="/">Ir a vista asesores →</button></aside>`;
+  const user=state.auth.user;
+  const visibleNav=navItems.filter(([id])=>id!=='users'||user?.role==='superadmin');
+  return `<aside class="sidebar">${brand('compact')}<nav>${visibleNav.map(([id,icon,label,path])=>`<button class="${id===active?'active':''}" data-nav="${path}">${icon} ${label}</button>`).join('')}</nav><div class="sidebar-card"><p class="eyebrow">SESIÓN</p><p><strong>${esc(user?.name||user?.email||'Administrador')}</strong><br><span>${esc(roleLabel(user?.role))}</span></p></div><div class="sidebar-card"><p class="eyebrow">RANKING PÚBLICO</p><p>Las ventas reales se conservan. Desde Asesores decides quién participa en el ranking y quién puede recibir Top Seller.</p></div><button class="ghost" data-nav="/">Ir a vista asesores →</button><button class="ghost logout-button" data-logout>Cerrar sesión</button></aside>`;
 }
+function roleLabel(role){return role==='superadmin'?'Superadministrador':role==='admin'?'Administrador':'Visualizador'}
+function canEditAdmin(){return ['superadmin','admin'].includes(state.auth.user?.role)}
 
 function adminFrame(active,title,subtitle,body,actions=''){
   root.innerHTML=`<div class="admin-layout">${sidebar(active)}<main class="admin-main"><header class="page-header"><div><p class="eyebrow plain">ADMINISTRACIÓN</p><h1>${title}</h1>${subtitle?`<p class="page-subtitle">${subtitle}</p>`:''}</div><div class="page-actions">${actions}</div></header>${body}</main></div>`;
@@ -75,6 +79,52 @@ function adminFrame(active,title,subtitle,body,actions=''){
 function loadingView(active,title){adminFrame(active,title,'','<section class="panel loading-panel">Cargando información…</section>')}
 function statusPill(ok,label){return `<span class="status-pill ${ok?'status-ok':'status-off'}"><i></i>${label}</span>`}
 
+
+async function refreshAuth(){
+  try{
+    const [status,me]=await Promise.all([fetchJson('/api/auth/status',false),fetchJson('/api/auth/me',false)]);
+    state.auth.checked=true;
+    state.auth.configured=!!status.configured;
+    state.auth.setupCodeConfigured=!!status.setupCodeConfigured;
+    state.auth.authenticated=!!me.authenticated;
+    state.auth.user=me.user||null;
+  }catch{
+    state.auth.checked=true;state.auth.authenticated=false;state.auth.user=null;
+  }
+}
+
+function authGateView(){
+  if(!state.auth.configured){
+    root.innerHTML=`<div class="auth-shell"><section class="auth-card">${brand()}<p class="eyebrow plain">PRIMER ACCESO</p><h1>Activar administración</h1><p>Configura el primer superadministrador del portal. Este paso solo aparece una vez.</p>${state.auth.setupCodeConfigured?'':`<div class="auth-warning"><strong>Falta un paso en Cloudflare.</strong><span>Crea un Secret llamado <code>ADMIN_SETUP_CODE</code> antes de continuar.</span></div>`}<form id="bootstrapForm" class="stack-form auth-form"><label>Nombre<input name="name" required autocomplete="name"></label><label>Correo<input name="email" type="email" required autocomplete="email"></label><label>Contraseña<input name="password" type="password" minlength="10" required autocomplete="new-password"></label><label>Confirmar contraseña<input name="confirmPassword" type="password" minlength="10" required autocomplete="new-password"></label><label>Código de configuración<input name="setupCode" type="password" required autocomplete="one-time-code"></label><button class="primary auth-primary" type="submit" ${state.auth.setupCodeConfigured?'':'disabled'}>Activar acceso</button><span id="authStatus"></span></form><button class="text-btn auth-back" data-nav="/">← Volver al ranking</button></section></div>`;
+    wireCommon();
+    document.getElementById('bootstrapForm')?.addEventListener('submit',bootstrapSubmit);
+    return;
+  }
+  root.innerHTML=`<div class="auth-shell"><section class="auth-card">${brand()}<p class="eyebrow plain">ACCESO ADMINISTRATIVO</p><h1>Iniciar sesión</h1><p>Ingresa con una cuenta autorizada para administrar MARNEZ Sales Score.</p><form id="loginForm" class="stack-form auth-form"><label>Correo<input name="email" type="email" required autocomplete="username"></label><label>Contraseña<input name="password" type="password" required autocomplete="current-password"></label><button class="primary auth-primary" type="submit">Entrar al administrador</button><span id="authStatus"></span></form><button class="text-btn auth-back" data-nav="/">← Volver al ranking</button></section></div>`;
+  wireCommon();
+  document.getElementById('loginForm')?.addEventListener('submit',loginSubmit);
+}
+
+async function bootstrapSubmit(e){
+  e.preventDefault();const form=e.currentTarget,status=document.getElementById('authStatus'),fd=new FormData(form);
+  if(fd.get('password')!==fd.get('confirmPassword')){status.textContent='Las contraseñas no coinciden.';return;}
+  status.textContent='Activando acceso…';
+  const body={name:fd.get('name'),email:fd.get('email'),password:fd.get('password'),setupCode:fd.get('setupCode')};
+  try{const result=await fetchJson('/api/auth/bootstrap',true,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});state.auth.configured=true;state.auth.authenticated=true;state.auth.user=result.user;render();}
+  catch(err){status.textContent=err.message;}
+}
+
+async function loginSubmit(e){
+  e.preventDefault();const form=e.currentTarget,status=document.getElementById('authStatus'),fd=new FormData(form);status.textContent='Verificando…';
+  try{const result=await fetchJson('/api/auth/login',true,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:fd.get('email'),password:fd.get('password')})});state.auth.authenticated=true;state.auth.user=result.user;render();}
+  catch(err){status.textContent=err.message;}
+}
+
+async function logout(){
+  try{await fetchJson('/api/auth/logout',false,{method:'POST'});}catch{}
+  state.auth.authenticated=false;state.auth.user=null;history.pushState({},'','/');render();
+}
+
 async function dashboardView(){
   loadingView('dashboard','Dashboard de ventas');
   try{
@@ -83,7 +133,7 @@ async function dashboardView(){
     const body=`<div class="kpis four"><div class="kpi"><b>▥</b><span>Ventas reales<strong>${data.totals?.sales||0}</strong></span></div><div class="kpi"><b>♙</b><span>Asesores en Excel<strong>${data.totals?.advisors||0}</strong></span></div><div class="kpi"><b>◎</b><span>Participan ranking<strong>${data.totals?.publicAdvisors||0}</strong></span></div><div class="kpi"><b>♛</b><span>Top Seller<strong>${esc(top?.name||'—')}</strong></span></div></div>
       <div class="compare-note"><strong>Ranking real vs. ranking público</strong><span>El ranking real respeta el Excel. El público aplica las reglas de reconocimiento configuradas por administración.</span></div>
       <div class="admin-grid admin-grid-equal">${ranking(real,{title:'Ranking real',eyebrow:'DATOS DEL EXCEL'})}${ranking(pub,{title:'Ranking público',eyebrow:'VISIBLE PARA ASESORES',topSellerId:top?.id})}</div>
-      <section class="panel source-panel"><div><p class="eyebrow plain">SINCRONIZACIÓN</p><h2>Excel original</h2><p>Última sincronización: ${data.source?.lastSyncAt?new Date(data.source.lastSyncAt).toLocaleString('es-MX'):'Pendiente'} · Filas procesadas: ${data.source?.usedRows||0}</p>${data.source?.lastError?`<p class="error-text">${esc(data.source.lastError)}</p>`:''}</div><button class="secondary" data-sync>↻ Sincronizar ahora</button><pre id="syncResult"></pre></section>`;
+      <section class="panel source-panel"><div><p class="eyebrow plain">SINCRONIZACIÓN</p><h2>Excel original</h2><p>Última sincronización: ${data.source?.lastSyncAt?new Date(data.source.lastSyncAt).toLocaleString('es-MX'):'Pendiente'} · Filas procesadas: ${data.source?.usedRows||0}</p>${data.source?.lastError?`<p class="error-text">${esc(data.source.lastError)}</p>`:''}</div>${canEditAdmin()?'<button class="secondary" data-sync>↻ Sincronizar ahora</button>':''}<pre id="syncResult"></pre></section>`;
     adminFrame('dashboard','Dashboard de ventas','Consulta el resultado real y el ranking de reconocimiento por separado.',body,statusPill(!data.source?.lastError,data.source?.lastError?'Con alerta':'Sincronizado'));
     wireAdminActions();
   }catch(e){adminError('dashboard','Dashboard de ventas',e);}
@@ -93,7 +143,8 @@ async function advisorsView(){
   loadingView('advisors','Asesores');
   try{
     const data=await fetchJson('/api/admin/advisors');
-    const cards=(data.advisors||[]).map(a=>`<article class="advisor-admin-card" data-advisor-id="${esc(a.id)}"><div class="advisor-admin-head">${avatar(a)}<div><strong>${esc(a.name)}</strong><span>${a.sales} ventas · ${money(a.amount)}</span></div><span class="position-badge">#${a.actualPosition||'—'} real</span></div><div class="advisor-form-grid"><label>Nombre visible<input data-field="displayName" value="${esc(a.name===a.sourceName?'':a.name)}" placeholder="${esc(a.sourceName)}"></label><label>URL de fotografía<input data-field="photoUrl" value="${esc(a.photoUrl||'')}" placeholder="https://..."></label><label class="wide">Motivo / nota interna<input data-field="exclusionReason" value="${esc(a.exclusionReason||'')}" placeholder="Ej. Coordinación comercial"></label></div><div class="toggle-grid"><label class="toggle-line"><span><strong>Participa en ranking</strong><small>Si está desactivado, sus ventas siguen en el ranking real pero no ocupan posición pública.</small></span><input type="checkbox" data-field="rankingEnabled" ${a.rankingEnabled?'checked':''}><i></i></label><label class="toggle-line"><span><strong>Elegible para Top Seller</strong><small>Puede aparecer en ranking sin recibir el reconocimiento.</small></span><input type="checkbox" data-field="topSellerEligible" ${a.topSellerEligible?'checked':''}><i></i></label><label class="toggle-line"><span><strong>Mostrar en portal público</strong><small>Oculta completamente al asesor de la vista pública.</small></span><input type="checkbox" data-field="publicVisible" ${a.publicVisible?'checked':''}><i></i></label></div><div class="card-actions"><span class="save-status"></span><button class="primary compact-primary" data-save-advisor>Guardar cambios</button></div></article>`).join('');
+    const canEdit=canEditAdmin();
+    const cards=(data.advisors||[]).map(a=>`<article class="advisor-admin-card" data-advisor-id="${esc(a.id)}"><div class="advisor-admin-head">${avatar(a)}<div><strong>${esc(a.name)}</strong><span>${a.sales} ventas · ${money(a.amount)}</span></div><span class="position-badge">#${a.actualPosition||'—'} real</span></div><div class="advisor-form-grid"><label>Nombre visible<input data-field="displayName" ${canEdit?'':'disabled'} value="${esc(a.name===a.sourceName?'':a.name)}" placeholder="${esc(a.sourceName)}"></label><label>URL de fotografía<input data-field="photoUrl" ${canEdit?'':'disabled'} value="${esc(a.photoUrl||'')}" placeholder="https://..."></label><label class="wide">Motivo / nota interna<input data-field="exclusionReason" ${canEdit?'':'disabled'} value="${esc(a.exclusionReason||'')}" placeholder="Ej. Coordinación comercial"></label></div><div class="toggle-grid"><label class="toggle-line"><span><strong>Participa en ranking</strong><small>Si está desactivado, sus ventas siguen en el ranking real pero no ocupan posición pública.</small></span><input type="checkbox" data-field="rankingEnabled" ${a.rankingEnabled?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Elegible para Top Seller</strong><small>Puede aparecer en ranking sin recibir el reconocimiento.</small></span><input type="checkbox" data-field="topSellerEligible" ${a.topSellerEligible?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Mostrar en portal público</strong><small>Oculta completamente al asesor de la vista pública.</small></span><input type="checkbox" data-field="publicVisible" ${a.publicVisible?'checked':''} ${canEdit?'':'disabled'}><i></i></label></div><div class="card-actions"><span class="save-status"></span>${canEdit?'<button class="primary compact-primary" data-save-advisor>Guardar cambios</button>':'<span class="viewer-note">Solo lectura</span>'}</div></article>`).join('');
     adminFrame('advisors','Asesores','Configura quién participa sin alterar las ventas del Excel.',`<div class="info-banner"><strong>Ejemplo para Diana:</strong> desactiva “Participa en ranking” y “Elegible para Top Seller”. Sus ventas seguirán visibles en el ranking real del administrador, pero no competirán por el reconocimiento.</div><section class="advisor-admin-list">${cards||'<div class="panel">Aún no hay asesores sincronizados.</div>'}</section>`);
     document.querySelectorAll('[data-save-advisor]').forEach(btn=>btn.addEventListener('click',()=>saveAdvisor(btn)));
   }catch(e){adminError('advisors','Asesores',e);}
@@ -124,9 +175,9 @@ async function usersView(){
   loadingView('users','Usuarios');
   try{
     const data=await fetchJson('/api/admin/users');
-    const rows=(data.users||[]).map(u=>`<div class="user-row" data-user-id="${esc(u.id)}"><div><strong>${esc(u.name||u.email)}</strong><span>${esc(u.email)}</span></div><select data-user-role><option value="superadmin" ${u.role==='superadmin'?'selected':''}>Superadministrador</option><option value="admin" ${u.role==='admin'?'selected':''}>Administrador</option><option value="viewer" ${u.role==='viewer'?'selected':''}>Visualizador</option></select><label class="mini-check"><input type="checkbox" data-user-active ${Number(u.active)===1?'checked':''}> Activo</label><button class="secondary small-button" data-save-user>Guardar</button></div>`).join('');
-    const body=`<div class="admin-grid"><section class="panel"><p class="eyebrow plain">NUEVO USUARIO</p><h2>Agregar administrador</h2><form id="adminUserForm" class="stack-form"><label>Nombre<input name="name" required></label><label>Correo<input name="email" type="email" required></label><label>Rol<select name="role"><option value="admin">Administrador</option><option value="superadmin">Superadministrador</option><option value="viewer">Visualizador</option></select></label><button class="primary" type="submit">Agregar usuario</button><span id="userFormStatus"></span></form><p class="form-note">Esta versión guarda usuarios y roles en D1. La pantalla de inicio de sesión y validación de acceso se conectará en una etapa posterior.</p></section><section class="panel"><p class="eyebrow plain">USUARIOS REGISTRADOS</p><h2>Roles</h2><div class="user-list">${rows||'<p>No hay usuarios registrados.</p>'}</div></section></div>`;
-    adminFrame('users','Usuarios','Administra el registro interno de usuarios y roles.',body);
+    const rows=(data.users||[]).map(u=>`<div class="user-row user-row-auth" data-user-id="${esc(u.id)}"><div><strong>${esc(u.name||u.email)}</strong><span>${esc(u.email)} · ${u.hasPassword?'Acceso activo':'Sin contraseña'}</span></div><select data-user-role><option value="superadmin" ${u.role==='superadmin'?'selected':''}>Superadministrador</option><option value="admin" ${u.role==='admin'?'selected':''}>Administrador</option><option value="viewer" ${u.role==='viewer'?'selected':''}>Visualizador</option></select><label class="mini-check"><input type="checkbox" data-user-active ${u.active?'checked':''}> Activo</label><input class="password-reset-input" data-user-password type="password" minlength="10" placeholder="Nueva contraseña (opcional)"><button class="secondary small-button" data-save-user>Guardar</button></div>`).join('');
+    const body=`<div class="admin-grid"><section class="panel"><p class="eyebrow plain">NUEVO USUARIO</p><h2>Agregar administrador</h2><form id="adminUserForm" class="stack-form"><label>Nombre<input name="name" required></label><label>Correo<input name="email" type="email" required></label><label>Contraseña temporal<input name="password" type="password" minlength="10" required></label><label>Rol<select name="role"><option value="admin">Administrador</option><option value="superadmin">Superadministrador</option><option value="viewer">Visualizador</option></select></label><button class="primary" type="submit">Agregar usuario</button><span id="userFormStatus"></span></form><p class="form-note">Cada usuario inicia sesión con su correo y contraseña. Solo el Superadministrador puede administrar usuarios.</p></section><section class="panel"><p class="eyebrow plain">USUARIOS REGISTRADOS</p><h2>Accesos y roles</h2><div class="user-list">${rows||'<p>No hay usuarios registrados.</p>'}</div></section></div>`;
+    adminFrame('users','Usuarios','Crea accesos y controla el nivel de permisos.',body);
     document.getElementById('adminUserForm')?.addEventListener('submit',createUser);
     document.querySelectorAll('[data-save-user]').forEach(btn=>btn.addEventListener('click',()=>saveUser(btn)));
   }catch(e){adminError('users','Usuarios',e);}
@@ -136,7 +187,7 @@ async function settingsView(){
   loadingView('settings','Configuración');
   try{
     const [settings,status]=await Promise.all([fetchJson('/api/admin/settings'),fetchJson('/api/sharepoint/status',false)]);
-    const body=`<div class="settings-grid"><section class="panel settings-card"><p class="eyebrow plain">SISTEMA</p><h2>Estado general</h2><div class="setting-line"><span>D1</span>${statusPill(settings.d1,'Conectado')}</div><div class="setting-line"><span>Versión</span><strong>${esc(settings.version)}</strong></div><div class="setting-line"><span>SharePoint configurado</span>${statusPill(settings.sharepointConfigured,settings.sharepointConfigured?'Sí':'No')}</div></section><section class="panel settings-card"><p class="eyebrow plain">FUENTE DE DATOS</p><h2>Excel original</h2><div class="setting-line"><span>Acceso al archivo</span>${statusPill(!!status.ok,status.ok?'Disponible':'Con error')}</div><div class="setting-line"><span>Última sincronización</span><strong>${settings.source?.lastSyncAt?new Date(settings.source.lastSyncAt).toLocaleString('es-MX'):'Pendiente'}</strong></div><div class="setting-line"><span>Hoja</span><strong>${esc(settings.source?.sheet||'—')}</strong></div><div class="setting-line"><span>Filas usadas</span><strong>${settings.source?.usedRows||0}</strong></div>${status.error?`<p class="error-text">${esc(status.error)}</p>`:''}<button class="secondary" data-sync>↻ Sincronizar ahora</button><pre id="syncResult"></pre></section></div>`;
+    const body=`<div class="settings-grid"><section class="panel settings-card"><p class="eyebrow plain">SISTEMA</p><h2>Estado general</h2><div class="setting-line"><span>D1</span>${statusPill(settings.d1,'Conectado')}</div><div class="setting-line"><span>Versión</span><strong>${esc(settings.version)}</strong></div><div class="setting-line"><span>SharePoint configurado</span>${statusPill(settings.sharepointConfigured,settings.sharepointConfigured?'Sí':'No')}</div></section><section class="panel settings-card"><p class="eyebrow plain">FUENTE DE DATOS</p><h2>Excel original</h2><div class="setting-line"><span>Acceso al archivo</span>${statusPill(!!status.ok,status.ok?'Disponible':'Con error')}</div><div class="setting-line"><span>Última sincronización</span><strong>${settings.source?.lastSyncAt?new Date(settings.source.lastSyncAt).toLocaleString('es-MX'):'Pendiente'}</strong></div><div class="setting-line"><span>Hoja</span><strong>${esc(settings.source?.sheet||'—')}</strong></div><div class="setting-line"><span>Filas usadas</span><strong>${settings.source?.usedRows||0}</strong></div>${status.error?`<p class="error-text">${esc(status.error)}</p>`:''}${canEditAdmin()?'<button class="secondary" data-sync>↻ Sincronizar ahora</button>':''}<pre id="syncResult"></pre></section></div>`;
     adminFrame('settings','Configuración','Estado de D1, SharePoint y sincronización.',body,statusPill(!!status.ok,status.ok?'Operativo':'Revisar'));
     wireAdminActions();
   }catch(e){adminError('settings','Configuración',e);}
@@ -146,7 +197,10 @@ function adminError(active,title,e){adminFrame(active,title,'',`<section class="
 
 function render(){
   if(!isAdmin()){publicView();return;}
+  if(!state.auth.checked){root.innerHTML='<div class="auth-shell"><section class="auth-card"><p>Cargando acceso…</p></section></div>';return;}
+  if(!state.auth.authenticated){authGateView();return;}
   const section=adminSection();
+  if(section==='users' && state.auth.user?.role!=='superadmin'){navigate('/admin');return;}
   if(section==='advisors')advisorsView();
   else if(section==='top-seller')topSellerView();
   else if(section==='history')historyView();
@@ -158,6 +212,7 @@ function render(){
 function navigate(path){history.pushState({},'',path);render()}
 function wireCommon(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.nav)));
+  document.querySelector('[data-logout]')?.addEventListener('click',logout);
   document.querySelector('[data-celebrate]')?.addEventListener('click',celebration);
   document.querySelectorAll('[data-download-top]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadRecognitionPng(top)}));
   document.querySelectorAll('[data-download-diploma]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadDiplomaPng(top)}));
@@ -165,8 +220,11 @@ function wireCommon(){
 function wireAdminActions(){document.querySelector('[data-sync]')?.addEventListener('click',validateSync)}
 
 async function fetchJson(url,throwOnHttp=true,options={}){
-  const r=await fetch(url,{cache:'no-store',...options});
+  const r=await fetch(url,{cache:'no-store',credentials:'same-origin',...options});
   const j=await r.json().catch(()=>({}));
+  if(r.status===401 && isAdmin() && !url.startsWith('/api/auth/')){
+    state.auth.authenticated=false;state.auth.user=null;setTimeout(render,0);
+  }
   if(throwOnHttp && (!r.ok || j.ok===false))throw new Error(j.error||`HTTP ${r.status}`);
   return j;
 }
@@ -196,7 +254,7 @@ async function createUser(e){
 }
 async function saveUser(btn){
   const row=btn.closest('[data-user-id]'),id=row.dataset.userId;btn.disabled=true;
-  try{await fetchJson(`/api/admin/users/${encodeURIComponent(id)}`,true,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({role:row.querySelector('[data-user-role]').value,active:row.querySelector('[data-user-active]').checked})});btn.textContent='Guardado ✓';setTimeout(()=>btn.textContent='Guardar',1000);}catch(e){btn.textContent='Error';}finally{btn.disabled=false;}
+  try{await fetchJson(`/api/admin/users/${encodeURIComponent(id)}`,true,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({role:row.querySelector('[data-user-role]').value,active:row.querySelector('[data-user-active]').checked,password:row.querySelector('[data-user-password]')?.value||''})});btn.textContent='Guardado ✓';setTimeout(()=>btn.textContent='Guardar',1000);}catch(e){btn.textContent='Error';}finally{btn.disabled=false;}
 }
 
 function formatMonthKey(v){const [y,m]=String(v).split('-').map(Number);return y&&m?new Intl.DateTimeFormat('es-MX',{month:'long',year:'numeric'}).format(new Date(y,m-1,1)).replace(/^./,s=>s.toUpperCase()):v;}
@@ -223,7 +281,7 @@ async function refreshScore(renderAfter=true){
   }catch(e){if(!lastScoreSignature&&!isAdmin())render();}
 }
 window.addEventListener('popstate',render);
-refreshScore(false).finally(render);
+(async function initApp(){await Promise.all([refreshAuth(),refreshScore(false)]);render();})();
 setInterval(()=>refreshScore(true),30000);
 
 async function downloadRecognitionPng(advisor){
@@ -266,28 +324,46 @@ async function buildRecognitionPng(advisor){
 
 async function buildDiplomaPng(advisor){
   const canvas=document.createElement('canvas');canvas.width=1414;canvas.height=2000;const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#f7f1e7';ctx.fillRect(0,0,1414,2000);
-  roundRect(ctx,72,72,1270,1856,36,'#fbf8f1','#d6c8a7');
-  roundRect(ctx,108,108,1198,1784,24,null,'#e1d6bd');
-  drawGlow(ctx,1180,180,260,'rgba(255,217,57,0.12)');drawGlow(ctx,230,1730,280,'rgba(28,42,53,0.06)');
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=360,h=logo.height*(w/logo.width);ctx.drawImage(logo,527,150,w,h);}
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.05;ctx.drawImage(seal,1060,1480,170,170);ctx.restore();}
-  ctx.textAlign='center';ctx.fillStyle='#1c2a35';ctx.font='700 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',707,320);
-  ctx.fillStyle='#9a7a1c';ctx.font='700 26px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,370);
-  ctx.fillStyle='#6f7680';ctx.font='500 21px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,707,410);
-  await drawAdvisorImage(ctx,advisor,707,600,110,'#ffffff');
-  ctx.fillStyle='#333333';ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',707,785);
-  ctx.fillStyle='#1c2a35';ctx.font='700 70px "Guaruja Neue", Arial, sans-serif';ctx.fillText(advisor.name,707,895);
-  ctx.fillStyle='#6f7680';ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,`Por haber destacado por su compromiso, constancia y excelente desempeño comercial, logrando posicionarse como Top Seller del mes en MARNEZ Desarrollos.`,707,995,910,42);
-  roundRect(ctx,382,1168,650,126,26,'#1c2a35');
-  ctx.fillStyle='#FFD939';ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DEL MES',707,1216);
-  ctx.fillStyle='#FFFFFF';ctx.font='700 58px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`${advisor.sales} ventas`,707,1276);
-  if(advisor.amount){ctx.fillStyle='rgba(255,255,255,0.75)';ctx.font='500 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(money(advisor.amount),707,1312);}
-  ctx.fillStyle='#1c2a35';ctx.font='700 34px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,DIPLOMA_MOTIVATION,707,1440,920,46);
-  ctx.strokeStyle='#d8c58d';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(250,1710);ctx.lineTo(560,1710);ctx.stroke();ctx.beginPath();ctx.moveTo(854,1710);ctx.lineTo(1164,1710);ctx.stroke();
-  ctx.fillStyle='#333333';ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',405,1750);ctx.fillText('VALIDACIÓN INTERNA',1009,1750);
-  ctx.fillStyle='#6f7680';ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento corporativo',405,1784);ctx.fillText(`Emitido en ${month}`,1009,1784);
-  ctx.fillStyle='#9a7a1c';ctx.font='700 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,1876);
+  const gold='#b99747',goldSoft='#dccb9b',navy='#1c2a35',ink='#333333',muted='#747474';
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,1414,2000);
+  roundRect(ctx,58,58,1298,1884,34,'#ffffff',goldSoft);
+  roundRect(ctx,88,88,1238,1824,28,null,gold);
+  roundRect(ctx,112,112,1190,1776,22,null,'#eadfbe');
+
+  // Detalles dorados de esquina
+  ctx.strokeStyle=gold;ctx.lineWidth=5;
+  [[146,146,250,146,146,250],[1268,146,1164,146,1268,250],[146,1854,250,1854,146,1750],[1268,1854,1164,1854,1268,1750]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
+
+  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.035;ctx.drawImage(seal,472,650,470,470);ctx.restore();}
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=350,h=logo.height*(w/logo.width);ctx.drawImage(logo,532,164,w,h);}
+
+  ctx.textAlign='center';
+  ctx.fillStyle=gold;ctx.font='700 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',707,340);
+  ctx.fillStyle=navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,420);
+  ctx.fillStyle=muted;ctx.font='500 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,707,466);
+  ctx.fillStyle=gold;ctx.fillRect(470,505,474,3);
+
+  await drawAdvisorImage(ctx,advisor,707,675,108,'#ffffff');
+  ctx.lineWidth=4;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(707,675,122,0,Math.PI*2);ctx.stroke();
+
+  ctx.fillStyle=muted;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',707,855);
+  ctx.fillStyle=navy;ctx.font='700 72px "Guaruja Neue", Arial, sans-serif';ctx.fillText(advisor.name,707,960);
+
+  ctx.fillStyle=ink;ctx.font='500 29px "Guaruja Neue", Arial, sans-serif';
+  wrapText(ctx,'Por destacar con compromiso, constancia y excelencia en su desempeño comercial, alcanzando el reconocimiento como Top Seller del mes en MARNEZ Desarrollos.',707,1060,940,43);
+
+  roundRect(ctx,407,1260,600,150,30,'#fffaf0',goldSoft);
+  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DEL MES',707,1310);
+  ctx.fillStyle=navy;ctx.font='700 66px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`${advisor.sales} ventas`,707,1382);
+  if(advisor.amount){ctx.fillStyle=muted;ctx.font='500 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(money(advisor.amount),707,1422);}
+
+  ctx.fillStyle=gold;ctx.font='700 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO AL ESFUERZO',707,1535);
+  ctx.fillStyle=navy;ctx.font='500 34px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,DIPLOMA_MOTIVATION,707,1605,900,48);
+
+  ctx.fillStyle=gold;ctx.fillRect(506,1742,402,3);
+  ctx.fillStyle=navy;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',707,1790);
+  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,707,1826);
+  ctx.fillStyle=gold;ctx.font='700 17px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,1870);
   return canvas.toDataURL('image/png');
 }
 
