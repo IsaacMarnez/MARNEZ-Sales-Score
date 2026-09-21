@@ -1,4 +1,4 @@
-# MARNEZ Sales Score · V0.1.0
+# MARNEZ Sales Score · V0.1.1
 
 Primera base funcional del portal de ranking comercial.
 
@@ -8,6 +8,8 @@ Primera base funcional del portal de ranking comercial.
 - Podio Top 3.
 - Top Seller destacado.
 - Animación de reconocimiento.
+- Descarga del reconocimiento del Top Seller en PNG.
+- Branding MARNEZ aplicado: logos, paleta institucional y tipografías Guaruja Neue.
 - Fotografía opcional; si falta, usa iniciales.
 - Panel administrativo base.
 - D1: esquema para asesores, administradores, histórico y configuración.
@@ -21,7 +23,7 @@ Primera base funcional del portal de ranking comercial.
 4. Persistir cada corte mensual en D1.
 5. Autenticación real y roles de administradores.
 6. Carga de fotografías.
-7. Exportar reconocimiento Top Seller a PNG/JPG.
+7. Conectar la gestión real de fotografías/perfiles desde administrador.
 
 ## Ejecutar local
 ```bash
