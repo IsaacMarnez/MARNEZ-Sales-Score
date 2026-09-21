@@ -1,8 +1,8 @@
-# MARNEZ Sales Score · V0.5.0
+# MARNEZ Sales Score · V0.5.1
 
 Versión con acceso administrativo protegido, roles reales y reconocimiento Top Seller premium.
 
-## Novedades V0.5.0
+## Novedades V0.5.1
 
 - Login real para `/admin` con sesión segura mediante cookie `HttpOnly`.
 - El botón **Administrador** no aparece en la vista pública si no existe una sesión administrativa iniciada.
@@ -41,7 +41,7 @@ Después del despliegue:
 ```json
 {
   "ok": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "d1": true,
   "sharepointConfigured": true,
   "authConfigured": false
@@ -71,7 +71,7 @@ Las rutas `/api/admin/*`, sincronización y diagnóstico de SharePoint están pr
 
 ## Base D1
 
-La V0.5.0 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
+La V0.5.1 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
 
 ## Top Seller y diploma
 
