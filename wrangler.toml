@@ -11,4 +11,4 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "marnez-sales-score-db"
-database_id = "99190a2f-24e4-4860-8c73-65b472e5458e"
+database_id = "99190a2F-24E4-486D-8C73-65B472E5458E"
