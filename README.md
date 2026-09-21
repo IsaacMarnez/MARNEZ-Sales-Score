@@ -1,4 +1,4 @@
-# MARNEZ Sales Score · V0.3.0
+# MARNEZ Sales Score · V0.4.0
 
 Portal de ranking comercial conectado a D1 y preparado para sincronizar el Excel original de SharePoint.
 
@@ -63,3 +63,10 @@ Debe indicar:
 ```json
 {"ok":true,"version":"0.3.0","d1":true,"sharepointConfigured":true}
 ```
+
+
+## Novedades V0.4.0
+- Reconocimiento Top Seller rediseñado con composición premium.
+- Descarga del reconocimiento en PNG con mejor distribución visual.
+- Nuevo diploma institucional en PNG con leyenda “Top Seller del Mes”.
+- Frase motivadora integrada en reconocimiento y diploma.

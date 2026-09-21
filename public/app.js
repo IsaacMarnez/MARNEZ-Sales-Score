@@ -14,6 +14,8 @@ const root=document.getElementById('root');
 const state={data:{advisors:demo,topSeller:demo[0],updatedAt:new Date().toISOString(),sourceStatus:'demo'},adminCache:{}};
 const month=new Intl.DateTimeFormat('es-MX',{month:'long',year:'numeric'}).format(new Date()).replace(/^./,s=>s.toUpperCase());
 const monthUpper=month.toUpperCase();
+const TOP_SELLER_MESSAGE='Reconocemos tu liderazgo comercial, constancia y resultados extraordinarios durante este mes.';
+const DIPLOMA_MOTIVATION='Tu esfuerzo, disciplina y constancia inspiran grandes resultados.';
 const esc=(s='')=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const initials=n=>String(n||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
 const money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n||0));
@@ -44,7 +46,7 @@ function publicView(){
     <header class="public-header">${brand()}<div class="header-actions"><span class="live"><i></i> EN VIVO</span><button class="text-btn" data-nav="/admin">Administrador</button></div></header>
     <main class="public-main">
       <div class="hero-copy"><p class="eyebrow plain">RANKING DE VENTAS · ${monthUpper}</p><h1>Resultados que<br><span>se reconocen.</span></h1><p>Score en vivo para visualizar el desempeño comercial, destacar al Top Seller del mes y compartir su reconocimiento en PNG.</p></div>
-      ${top?`<section class="top-card"><div class="top-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="top-glow"></div><div class="eyebrow">TOP SELLER · ${monthUpper}</div><div class="top-content">${avatar(top,true)}<div><p class="muted">Reconocimiento del mes</p><h1>${esc(top.name)}</h1><p class="top-copy">Liderando el Sales Score con <strong>${top.sales} ventas</strong>.</p><div class="cta-row"><button class="primary" data-celebrate>★ Mostrar reconocimiento</button><button class="secondary secondary-dark" data-download-top>⬇ Descargar PNG</button></div></div><div class="top-number"><span>01</span><small>RECONOCIMIENTO</small></div></div></section>`:`<section class="panel empty-panel"><h2>Top Seller pendiente</h2><p>No hay asesores elegibles para reconocimiento. Puedes configurarlos desde Administrador → Asesores.</p></section>`}
+      ${top?`<section class="top-card top-card-premium"><div class="top-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="top-glow"></div><div class="top-card-grid"><div class="top-copy-zone"><div class="eyebrow">TOP SELLER · ${monthUpper}</div><p class="muted">Reconocimiento del mes</p><h1>${esc(top.name)}</h1><p class="top-copy">${TOP_SELLER_MESSAGE}</p><div class="top-stats"><div><strong>${top.sales}</strong><span>Ventas</span></div>${top.amount?`<div><strong>${money(top.amount)}</strong><span>Monto</span></div>`:''}</div><div class="cta-row"><button class="primary" data-celebrate>★ Mostrar reconocimiento</button><button class="secondary secondary-dark" data-download-top>⬇ Reconocimiento PNG</button><button class="secondary secondary-dark" data-download-diploma>⬇ Diploma PNG</button></div></div><div class="top-photo-zone"><div class="top-photo-frame">${avatar(top,true)}</div><div class="top-award-badge"><span>01</span><small>TOP SELLER</small></div></div></div></section>`:`<section class="panel empty-panel"><h2>Top Seller pendiente</h2><p>No hay asesores elegibles para reconocimiento. Puedes configurarlos desde Administrador → Asesores.</p></section>`}
       <section class="panel podium-panel"><div class="panel-title"><div><p class="eyebrow plain">PODIO DEL MES</p><h2>Top 3 público</h2></div><span class="icon">🥇</span></div>${podium(advisors.slice(0,3))}</section>
       ${ranking(advisors,{topSellerId:top?.id})}
       <footer>Última actualización: ${new Date(state.data.updatedAt).toLocaleString('es-MX')} · MARNEZ Desarrollos</footer>
@@ -103,7 +105,7 @@ async function topSellerView(){
     const data=await fetchJson('/api/score');
     state.data=data;
     const top=data.topSeller;
-    const body=top?`<div class="top-seller-admin-grid"><section class="panel top-seller-preview"><p class="eyebrow plain">RECONOCIMIENTO ACTUAL</p>${avatar(top,true)}<h2>${esc(top.name)}</h2><p>${top.sales} ventas · ${money(top.amount)}</p><div class="cta-row centered"><button class="primary" data-celebrate>★ Ver animación</button><button class="secondary" data-download-top>⬇ Descargar PNG</button></div></section><section class="panel"><p class="eyebrow plain">REGLAS</p><h2>Cómo se elige</h2><p>El Top Seller es el asesor mejor posicionado dentro del ranking público que además tenga activada la opción <strong>Elegible para Top Seller</strong>.</p><button class="secondary" data-nav="/admin/advisors">Configurar asesores →</button></section></div>`:`<section class="panel"><h2>No hay Top Seller elegible</h2><p>Activa al menos un asesor desde Asesores.</p><button class="secondary" data-nav="/admin/advisors">Ir a Asesores</button></section>`;
+    const body=top?`<div class="top-seller-admin-grid"><section class="panel top-seller-preview premium-preview"><p class="eyebrow plain">RECONOCIMIENTO ACTUAL</p><div class="preview-hero"><div class="preview-photo-frame">${avatar(top,true)}</div><div class="preview-copy"><h2>${esc(top.name)}</h2><p>${top.sales} ventas${top.amount?` · ${money(top.amount)}`:''}</p><blockquote>${DIPLOMA_MOTIVATION}</blockquote></div></div><div class="cta-row centered wrap"><button class="primary" data-celebrate>★ Ver animación</button><button class="secondary" data-download-top>⬇ Descargar reconocimiento PNG</button><button class="secondary" data-download-diploma>⬇ Descargar diploma PNG</button></div></section><section class="panel diploma-info-card"><p class="eyebrow plain">DIPLOMA</p><h2>Reconocimiento institucional</h2><p>Además de la pieza visual Top Seller, el portal genera un diploma premium con la leyenda <strong>“Top Seller del Mes”</strong> y una frase motivadora.</p><ul class="feature-list"><li>Formato institucional MARNEZ</li><li>Nombre del asesor en grande</li><li>Mes del reconocimiento</li><li>Leyenda motivadora</li></ul><button class="secondary" data-nav="/admin/advisors">Configurar asesores →</button></section></div>`:`<section class="panel"><h2>No hay Top Seller elegible</h2><p>Activa al menos un asesor desde Asesores.</p><button class="secondary" data-nav="/admin/advisors">Ir a Asesores</button></section>`;
     adminFrame('top-seller','Top Seller','Vista previa, animación y descarga del reconocimiento.',body);
     wireCommon();
   }catch(e){adminError('top-seller','Top Seller',e);}
@@ -158,6 +160,7 @@ function wireCommon(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.nav)));
   document.querySelector('[data-celebrate]')?.addEventListener('click',celebration);
   document.querySelectorAll('[data-download-top]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadRecognitionPng(top)}));
+  document.querySelectorAll('[data-download-diploma]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadDiplomaPng(top)}));
 }
 function wireAdminActions(){document.querySelector('[data-sync]')?.addEventListener('click',validateSync)}
 
@@ -200,7 +203,13 @@ function formatMonthKey(v){const [y,m]=String(v).split('-').map(Number);return y
 
 function celebration(){
   const a=state.data.topSeller;if(!a)return;
-  const el=document.createElement('div');el.className='celebration';el.innerHTML=`<div class="confetti c1"></div><div class="confetti c2"></div><div class="confetti c3"></div><div class="confetti c4"></div><div class="celebration-card"><div class="celebration-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><img src="${ASSETS.logoStacked}" alt="Marnez Desarrollos" class="celebration-logo"><p class="eyebrow plain">TOP SELLER · ${monthUpper}</p>${avatar(a,true)}<h1>${esc(a.name)}</h1><p>Reconocemos tu constancia, desempeño y resultados durante este mes.</p><div class="recognition-score"><strong>${a.sales}</strong><span>VENTAS</span></div><div class="modal-actions"><button class="primary" data-modal-download>⬇ Descargar PNG</button><button class="secondary" data-close>Cerrar reconocimiento</button></div><small>MARNEZ DESARROLLOS</small></div>`;document.body.appendChild(el);el.addEventListener('click',e=>{if(e.target===el||e.target.closest('[data-close]'))el.remove()});el.querySelector('[data-modal-download]').addEventListener('click',()=>downloadRecognitionPng(a));
+  const el=document.createElement('div');
+  el.className='celebration';
+  el.innerHTML=`<div class="confetti c1"></div><div class="confetti c2"></div><div class="confetti c3"></div><div class="confetti c4"></div><div class="celebration-card premium-card"><div class="celebration-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="celebration-grid"><div class="celebration-copy"><img src="${ASSETS.logoStacked}" alt="Marnez Desarrollos" class="celebration-logo"><p class="eyebrow plain">TOP SELLER DEL MES · ${monthUpper}</p><h1>${esc(a.name)}</h1><p>${TOP_SELLER_MESSAGE}</p><div class="celebration-pill-row"><span class="celebration-pill">${a.sales} ventas</span>${a.amount?`<span class="celebration-pill">${money(a.amount)}</span>`:''}</div><blockquote>${DIPLOMA_MOTIVATION}</blockquote></div><div class="celebration-visual"><div class="celebration-photo-wrap">${avatar(a,true)}</div><div class="recognition-score"><strong>${a.sales}</strong><span>VENTAS</span></div></div></div><div class="modal-actions"><button class="primary" data-modal-download>⬇ Reconocimiento PNG</button><button class="secondary" data-modal-diploma>⬇ Diploma PNG</button><button class="secondary" data-close>Cerrar</button></div><small>MARNEZ DESARROLLOS</small></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('click',e=>{if(e.target===el||e.target.closest('[data-close]'))el.remove()});
+  el.querySelector('[data-modal-download]')?.addEventListener('click',()=>downloadRecognitionPng(a));
+  el.querySelector('[data-modal-diploma]')?.addEventListener('click',()=>downloadDiplomaPng(a));
 }
 
 let lastScoreSignature='';
@@ -220,19 +229,73 @@ setInterval(()=>refreshScore(true),30000);
 async function downloadRecognitionPng(advisor){
   const dataUrl=await buildRecognitionPng(advisor),link=document.createElement('a');
   const safeName=advisor.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
-  link.href=dataUrl;link.download=`top-seller-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.png`;document.body.appendChild(link);link.click();link.remove();
+  link.href=dataUrl;link.download=`top-seller-reconocimiento-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.png`;document.body.appendChild(link);link.click();link.remove();
+}
+
+async function downloadDiplomaPng(advisor){
+  const dataUrl=await buildDiplomaPng(advisor),link=document.createElement('a');
+  const safeName=advisor.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+  link.href=dataUrl;link.download=`top-seller-diploma-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.png`;document.body.appendChild(link);link.click();link.remove();
 }
 
 async function buildRecognitionPng(advisor){
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;const ctx=canvas.getContext('2d');
-  ctx.fillStyle=COLORS.light;ctx.fillRect(0,0,1080,1350);const grad=ctx.createLinearGradient(0,0,0,1350);grad.addColorStop(0,'#efefef');grad.addColorStop(1,'#e3e3e3');ctx.fillStyle=grad;ctx.fillRect(0,0,1080,1350);drawGlow(ctx,880,180,250,'rgba(255,217,57,0.16)');drawGlow(ctx,220,1180,320,'rgba(28,42,53,0.07)');
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.06;ctx.drawImage(seal,715,915,255,255);ctx.restore();}roundRect(ctx,104,110,872,1120,42,COLORS.white,'rgba(28,42,53,0.08)');
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=320,h=logo.height*(w/logo.width);ctx.drawImage(logo,380,152,w,h)}
-  ctx.textAlign='center';ctx.fillStyle=COLORS.navy;ctx.font='700 26px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`TOP SELLER · ${monthUpper}`,540,300);ctx.fillStyle=COLORS.textSoft;ctx.font='500 20px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento mensual de desempeño comercial',540,338);
-  const x=540,y=470,r=92;if(advisor.photoUrl){const photo=await loadImageSafe(advisor.photoUrl);if(photo){ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.closePath();ctx.clip();drawCoverImage(ctx,photo,x-r,y-r,r*2,r*2);ctx.restore();ctx.lineWidth=8;ctx.strokeStyle=COLORS.creamStrong;ctx.beginPath();ctx.arc(x,y,r+4,0,Math.PI*2);ctx.stroke()}else drawInitialsAvatar(ctx,advisor.name,x,y,r)}else drawInitialsAvatar(ctx,advisor.name,x,y,r);
-  ctx.fillStyle=COLORS.charcoal;ctx.font='700 66px "Guaruja Neue", Arial, sans-serif';ctx.fillText(advisor.name,540,630);ctx.fillStyle=COLORS.textSoft;ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,'Reconocemos tu constancia, desempeño y resultados durante este mes.',540,690,680,40);ctx.fillStyle=COLORS.navy;ctx.font='700 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('SALES SCORE · MARNEZ DESARROLLOS',540,815);
-  ctx.fillStyle=COLORS.navy;ctx.beginPath();ctx.arc(540,925,105,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.white;ctx.font='700 82px "Guaruja Neue", Arial, sans-serif';ctx.fillText(String(advisor.sales),540,940);ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('VENTAS',540,980);roundRect(ctx,250,1040,580,88,44,COLORS.creamStrong);ctx.fillStyle=COLORS.charcoal;ctx.font='700 32px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',540,1095);ctx.fillStyle=COLORS.navy;ctx.font='700 20px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento oficial generado por MARNEZ Sales Score',540,1170);ctx.fillStyle=COLORS.yellow;ctx.fillRect(218,1198,644,4);ctx.fillStyle=COLORS.textSoft;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Emitido en ${month}`,540,1242);return canvas.toDataURL('image/png');
+  const bg=ctx.createLinearGradient(0,0,1080,1350);bg.addColorStop(0,'#1c2a35');bg.addColorStop(1,'#243544');ctx.fillStyle=bg;ctx.fillRect(0,0,1080,1350);
+  drawGlow(ctx,920,180,320,'rgba(255,217,57,0.18)');drawGlow(ctx,120,1160,280,'rgba(255,255,255,0.06)');
+  ctx.fillStyle='rgba(255,255,255,0.05)';ctx.fillRect(88,92,904,1166);
+  roundRect(ctx,88,92,904,1166,44,'rgba(255,255,255,0.03)','rgba(255,255,255,0.12)');
+  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.08;ctx.drawImage(seal,735,960,210,210);ctx.restore();}
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=300,h=logo.height*(w/logo.width);ctx.drawImage(logo,390,138,w,h);}
+  ctx.textAlign='center';
+  ctx.fillStyle='#FFD939';ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',540,266);
+  ctx.fillStyle='rgba(255,255,255,0.75)';ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,540,302);
+  const px=540,py=470,pr=120;
+  await drawAdvisorImage(ctx,advisor,px,py,pr,'#F2EAD9');
+  ctx.fillStyle='#FFFFFF';ctx.font='700 68px "Guaruja Neue", Arial, sans-serif';ctx.fillText(advisor.name,540,655);
+  ctx.fillStyle='rgba(255,255,255,0.82)';ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,TOP_SELLER_MESSAGE,540,718,720,38);
+  roundRect(ctx,238,815,604,118,28,'rgba(255,255,255,0.06)','rgba(255,255,255,0.12)');
+  ctx.fillStyle='#FFD939';ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DESTACADO',540,858);
+  ctx.fillStyle='#FFFFFF';ctx.font='700 52px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`${advisor.sales} ventas`,540,908);
+  if(advisor.amount){ctx.fillStyle='rgba(255,255,255,0.72)';ctx.font='500 20px "Guaruja Neue", Arial, sans-serif';ctx.fillText(money(advisor.amount),540,937);}
+  ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font='500 24px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,DIPLOMA_MOTIVATION,540,1038,660,36);
+  ctx.fillStyle='#FFD939';ctx.fillRect(258,1128,564,3);
+  ctx.fillStyle='rgba(255,255,255,0.65)';ctx.font='500 16px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento oficial generado por MARNEZ Sales Score',540,1170);
+  ctx.fillStyle='rgba(255,255,255,0.72)';ctx.font='500 16px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Emitido en ${month}`,540,1210);
+  return canvas.toDataURL('image/png');
 }
+
+async function buildDiplomaPng(advisor){
+  const canvas=document.createElement('canvas');canvas.width=1414;canvas.height=2000;const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#f7f1e7';ctx.fillRect(0,0,1414,2000);
+  roundRect(ctx,72,72,1270,1856,36,'#fbf8f1','#d6c8a7');
+  roundRect(ctx,108,108,1198,1784,24,null,'#e1d6bd');
+  drawGlow(ctx,1180,180,260,'rgba(255,217,57,0.12)');drawGlow(ctx,230,1730,280,'rgba(28,42,53,0.06)');
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=360,h=logo.height*(w/logo.width);ctx.drawImage(logo,527,150,w,h);}
+  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.05;ctx.drawImage(seal,1060,1480,170,170);ctx.restore();}
+  ctx.textAlign='center';ctx.fillStyle='#1c2a35';ctx.font='700 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',707,320);
+  ctx.fillStyle='#9a7a1c';ctx.font='700 26px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,370);
+  ctx.fillStyle='#6f7680';ctx.font='500 21px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,707,410);
+  await drawAdvisorImage(ctx,advisor,707,600,110,'#ffffff');
+  ctx.fillStyle='#333333';ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',707,785);
+  ctx.fillStyle='#1c2a35';ctx.font='700 70px "Guaruja Neue", Arial, sans-serif';ctx.fillText(advisor.name,707,895);
+  ctx.fillStyle='#6f7680';ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,`Por haber destacado por su compromiso, constancia y excelente desempeño comercial, logrando posicionarse como Top Seller del mes en MARNEZ Desarrollos.`,707,995,910,42);
+  roundRect(ctx,382,1168,650,126,26,'#1c2a35');
+  ctx.fillStyle='#FFD939';ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DEL MES',707,1216);
+  ctx.fillStyle='#FFFFFF';ctx.font='700 58px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`${advisor.sales} ventas`,707,1276);
+  if(advisor.amount){ctx.fillStyle='rgba(255,255,255,0.75)';ctx.font='500 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(money(advisor.amount),707,1312);}
+  ctx.fillStyle='#1c2a35';ctx.font='700 34px "Guaruja Neue", Arial, sans-serif';wrapText(ctx,DIPLOMA_MOTIVATION,707,1440,920,46);
+  ctx.strokeStyle='#d8c58d';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(250,1710);ctx.lineTo(560,1710);ctx.stroke();ctx.beginPath();ctx.moveTo(854,1710);ctx.lineTo(1164,1710);ctx.stroke();
+  ctx.fillStyle='#333333';ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',405,1750);ctx.fillText('VALIDACIÓN INTERNA',1009,1750);
+  ctx.fillStyle='#6f7680';ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento corporativo',405,1784);ctx.fillText(`Emitido en ${month}`,1009,1784);
+  ctx.fillStyle='#9a7a1c';ctx.font='700 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,1876);
+  return canvas.toDataURL('image/png');
+}
+
+async function drawAdvisorImage(ctx,advisor,x,y,r,borderColor){
+  if(advisor.photoUrl){const photo=await loadImageSafe(advisor.photoUrl);if(photo){ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.closePath();ctx.clip();drawCoverImage(ctx,photo,x-r,y-r,r*2,r*2);ctx.restore();ctx.lineWidth=8;ctx.strokeStyle=borderColor;ctx.beginPath();ctx.arc(x,y,r+5,0,Math.PI*2);ctx.stroke();return;}}
+  drawInitialsAvatar(ctx,advisor.name,x,y,r);ctx.lineWidth=8;ctx.strokeStyle=borderColor;ctx.beginPath();ctx.arc(x,y,r+5,0,Math.PI*2);ctx.stroke();
+}
+
 function roundRect(ctx,x,y,w,h,r,fill,stroke){const radius=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+radius,y);ctx.arcTo(x+w,y,x+w,y+h,radius);ctx.arcTo(x+w,y+h,x,y+h,radius);ctx.arcTo(x,y+h,x,y,radius);ctx.arcTo(x,y,x+w,y,radius);ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
 function drawGlow(ctx,x,y,radius,color){const g=ctx.createRadialGradient(x,y,0,x,y,radius);g.addColorStop(0,color);g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill()}
 function drawInitialsAvatar(ctx,name,x,y,r){ctx.save();ctx.fillStyle='#dde1e5';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(initials(name),x,y+4);ctx.restore();ctx.textBaseline='alphabetic'}

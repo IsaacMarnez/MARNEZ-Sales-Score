@@ -555,7 +555,7 @@ export default{
     const path=url.pathname;
     if(path==='/api/health'){
       await ensureSchema(env);
-      return json({ok:true,version:'0.3.0',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
+      return json({ok:true,version:'0.4.0',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
     }
     if(path==='/api/score')return json(await getScore(env));
     if(path==='/api/admin/overview')return json(await adminOverview(env));
@@ -578,7 +578,7 @@ export default{
     }
     if(path==='/api/admin/settings'){
       const overview=await adminOverview(env);
-      return json({ok:true,version:'0.3.0',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source});
+      return json({ok:true,version:'0.4.0',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source});
     }
     if(path==='/api/sharepoint/status')return json(await sourceStatus(env));
     if(path==='/api/sharepoint/diagnostic'){
