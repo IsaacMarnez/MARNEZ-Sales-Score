@@ -551,7 +551,7 @@ async function historyData(env){
 
 const SESSION_COOKIE='marnez_admin_session';
 const SESSION_SECONDS=60*60*12;
-const PASSWORD_ITERATIONS=120000;
+const LEGACY_PASSWORD_ITERATIONS=120000;
 
 function bytesToBase64Url(bytes){
   let binary='';
@@ -572,16 +572,41 @@ async function sha256Text(value=''){
   const digest=await crypto.subtle.digest('SHA-256',bytes);
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
-async function passwordHash(password,saltValue=null,iterations=PASSWORD_ITERATIONS){
-  const salt=saltValue?base64UrlToBytes(saltValue):crypto.getRandomValues(new Uint8Array(16));
+function authSecret(env){
+  return String(env.ADMIN_AUTH_SECRET||env.ADMIN_SETUP_CODE||'');
+}
+async function fastPasswordHash(env,password,saltValue=null){
+  const secret=authSecret(env);
+  if(!secret)throw new Error('Falta ADMIN_SETUP_CODE o ADMIN_AUTH_SECRET en Cloudflare.');
+  const salt=saltValue||randomToken(16);
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),'HMAC',{hash:'SHA-256'},false,['sign']);
+  const data=new TextEncoder().encode(`${salt}:${String(password)}`);
+  const signature=await crypto.subtle.sign('HMAC',key,data);
+  return {hash:bytesToBase64Url(new Uint8Array(signature)),salt,iterations:0};
+}
+async function legacyPasswordHash(password,saltValue,iterations=LEGACY_PASSWORD_ITERATIONS){
+  const salt=base64UrlToBytes(saltValue);
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);
   const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt,iterations},key,256);
-  return {hash:bytesToBase64Url(new Uint8Array(bits)),salt:bytesToBase64Url(salt),iterations};
+  return bytesToBase64Url(new Uint8Array(bits));
 }
-async function verifyPassword(password,row){
+function safeEqualBase64Url(a,b){
+  try{
+    const aa=base64UrlToBytes(a),bb=base64UrlToBytes(b);
+    if(aa.length!==bb.length)return false;
+    if(typeof crypto.subtle.timingSafeEqual==='function')return crypto.subtle.timingSafeEqual(aa,bb);
+    let diff=0;for(let i=0;i<aa.length;i++)diff|=aa[i]^bb[i];return diff===0;
+  }catch{return false;}
+}
+async function verifyPassword(env,password,row){
   if(!row?.password_hash||!row?.password_salt)return false;
-  const result=await passwordHash(password,row.password_salt,Number(row.password_iterations||PASSWORD_ITERATIONS));
-  return result.hash===row.password_hash;
+  const iterations=Number(row.password_iterations||0);
+  if(iterations>0){
+    const hash=await legacyPasswordHash(password,row.password_salt,iterations);
+    return safeEqualBase64Url(hash,row.password_hash);
+  }
+  const result=await fastPasswordHash(env,password,row.password_salt);
+  return safeEqualBase64Url(result.hash,row.password_hash);
 }
 function parseCookieHeader(value=''){
   const out={};
@@ -640,7 +665,7 @@ async function bootstrapAdmin(request,env,body){
   const email=String(body.email||'').trim().toLowerCase(),name=String(body.name||'').trim(),password=String(body.password||'');
   if(!email.includes('@'))return authResponse({ok:false,error:'Ingresa un correo válido.'},400);
   if(password.length<10)return authResponse({ok:false,error:'La contraseña debe tener al menos 10 caracteres.'},400);
-  const ph=await passwordHash(password);
+  const ph=await fastPasswordHash(env,password);
   const existing=await env.DB.prepare('SELECT id FROM admins WHERE email=?').bind(email).first();
   const id=existing?.id||crypto.randomUUID();
   if(existing){
@@ -658,7 +683,7 @@ async function loginAdmin(request,env,body){
   await ensureSchema(env);
   const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
   const row=await env.DB.prepare('SELECT * FROM admins WHERE email=? AND active=1 LIMIT 1').bind(email).first();
-  if(!row || !(await verifyPassword(password,row)))return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
+  if(!row || !(await verifyPassword(env,password,row)))return authResponse({ok:false,error:'Correo o contraseña incorrectos.'},401);
   const user={id:row.id,email:row.email,name:row.name||row.email,role:row.role,active:true};
   const session=await createSession(env,user,request);
   await env.DB.prepare('UPDATE admins SET last_login_at=?,updated_at=? WHERE id=?').bind(nowIso(),nowIso(),row.id).run();
@@ -705,7 +730,7 @@ async function updateAdmin(env,id,body){
   const password=String(body.password||'');
   if(password){
     if(password.length<10)return {ok:false,error:'La nueva contraseña debe tener al menos 10 caracteres.'};
-    const ph=await passwordHash(password);passwordHashValue=ph.hash;passwordSalt=ph.salt;passwordIterations=ph.iterations;
+    const ph=await fastPasswordHash(env,password);passwordHashValue=ph.hash;passwordSalt=ph.salt;passwordIterations=ph.iterations;
     await env.DB.prepare('DELETE FROM admin_sessions WHERE admin_id=?').bind(id).run();
   }
   await env.DB.prepare(`UPDATE admins SET name=?,role=?,active=?,password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE id=?`)
@@ -722,7 +747,7 @@ export default{
     const url=new URL(request.url),path=url.pathname;
     if(path==='/api/health'){
       await ensureSchema(env);
-      return json({ok:true,version:'0.5.1',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
+      return json({ok:true,version:'0.5.2',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
     }
     if(path==='/api/score')return json(await getScore(env));
 
@@ -730,8 +755,14 @@ export default{
       if(!env.DB)return json({ok:false,error:'D1 no está conectada.'},500);
       return json({ok:true,configured:await authConfigured(env),setupCodeConfigured:!!env.ADMIN_SETUP_CODE});
     }
-    if(path==='/api/auth/bootstrap' && request.method==='POST')return bootstrapAdmin(request,env,await readJson(request));
-    if(path==='/api/auth/login' && request.method==='POST')return loginAdmin(request,env,await readJson(request));
+    if(path==='/api/auth/bootstrap' && request.method==='POST'){
+      try{return await bootstrapAdmin(request,env,await readJson(request));}
+      catch(e){console.error('bootstrapAdmin failed',e);return authResponse({ok:false,error:`No se pudo activar la administración: ${e?.message||String(e)}`},500);}
+    }
+    if(path==='/api/auth/login' && request.method==='POST'){
+      try{return await loginAdmin(request,env,await readJson(request));}
+      catch(e){console.error('loginAdmin failed',e);return authResponse({ok:false,error:`No se pudo iniciar sesión: ${e?.message||String(e)}`},500);}
+    }
     if(path==='/api/auth/logout' && request.method==='POST')return logoutAdmin(request,env);
     if(path==='/api/auth/me' && request.method==='GET'){
       const user=await getSessionUser(request,env);
@@ -779,7 +810,7 @@ export default{
     if(path==='/api/admin/settings'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
       const overview=await adminOverview(env);
-      return json({ok:true,version:'0.5.1',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
+      return json({ok:true,version:'0.5.2',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
     }
     if(path==='/api/sharepoint/status'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
