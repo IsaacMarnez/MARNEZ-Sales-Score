@@ -388,48 +388,52 @@ async function buildRecognitionCanvas(advisor){
 }
 
 async function buildDiplomaCanvas(advisor){
-  const canvas=document.createElement('canvas');canvas.width=1414;canvas.height=2000;const ctx=canvas.getContext('2d');
+  const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=1414;const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,CX=W/2;
   const gold='#b99747',goldSoft='#dccb9b',navy='#1c2a35',ink='#333333',muted='#747474';
-  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,1414,2000);
-  roundRect(ctx,58,58,1298,1884,34,'#ffffff',goldSoft);
-  roundRect(ctx,88,88,1238,1824,28,null,gold);
-  roundRect(ctx,112,112,1190,1776,22,null,'#eadfbe');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
+  roundRect(ctx,40,40,W-80,H-80,28,'#ffffff',goldSoft);
+  roundRect(ctx,68,68,W-136,H-136,22,null,gold);
+  roundRect(ctx,92,92,W-184,H-184,18,null,'#eadfbe');
 
   ctx.strokeStyle=gold;ctx.lineWidth=5;
-  [[146,146,250,146,146,250],[1268,146,1164,146,1268,250],[146,1854,250,1854,146,1750],[1268,1854,1164,1854,1268,1750]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
+  [[122,122,224,122,122,224],[W-122,122,W-224,122,W-122,224],[122,H-122,224,H-122,122,H-224],[W-122,H-122,W-224,H-122,W-122,H-224]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
 
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.03;ctx.drawImage(seal,462,668,490,490);ctx.restore();}
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=350,h=logo.height*(w/logo.width);ctx.drawImage(logo,532,164,w,h);}
+  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.03;ctx.drawImage(seal,790,360,420,420);ctx.restore();}
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=320,h=logo.height*(w/logo.width);ctx.drawImage(logo,CX-w/2,118,w,h);}
 
   ctx.textAlign='center';
-  ctx.fillStyle=gold;ctx.font='700 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',707,340);
-  ctx.fillStyle=navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,420);
-  ctx.fillStyle=muted;ctx.font='500 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,707,466);
-  ctx.fillStyle=gold;ctx.fillRect(470,505,474,3);
+  ctx.fillStyle=gold;ctx.font='700 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',CX,262);
+  ctx.fillStyle=navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',CX,334);
+  ctx.fillStyle=muted;ctx.font='500 21px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,CX,376);
+  ctx.fillStyle=gold;ctx.fillRect(CX-230,404,460,3);
 
-  await drawAdvisorImage(ctx,advisor,707,670,106,'#ffffff');
-  ctx.lineWidth=4;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(707,670,120,0,Math.PI*2);ctx.stroke();
+  await drawAdvisorImage(ctx,advisor,420,682,112,'#ffffff');
+  ctx.lineWidth=4;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(420,682,126,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle=gold;ctx.font='700 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER',420,852);
 
-  ctx.fillStyle=muted;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',707,850);
-  const diplomaNameSize=fitTextWidth(ctx,advisor.name,980,74,44,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${diplomaNameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,707,955);
+  ctx.fillStyle=muted;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';ctx.textAlign='left';ctx.fillText('Se otorga el presente reconocimiento a',690,560);
+  const diplomaNameSize=fitTextWidth(ctx,advisor.name,1040,70,42,'700');
+  ctx.fillStyle=navy;ctx.font=`700 ${diplomaNameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,690,642);
 
-  ctx.fillStyle=ink;ctx.font='500 29px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedCentered(ctx,'Por destacar con compromiso, constancia y excelencia en su desempeño comercial, alcanzando el reconocimiento como Top Seller del mes en MARNEZ Desarrollos.',707,1050,930,42,4);
+  ctx.fillStyle=ink;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';
+  drawWrappedAligned(ctx,'Por destacar con compromiso, constancia y excelencia en su desempeño comercial, alcanzando el reconocimiento como Top Seller del mes en MARNEZ Desarrollos.',690,724,1040,40,4,'left');
 
-  roundRect(ctx,382,1250,650,165,30,'#fffaf0',goldSoft);
-  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DEL MES',707,1300);
-  const certSalesSize=fitTextWidth(ctx,`${advisor.sales} ventas`,520,66,42,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${certSalesSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(`${advisor.sales} ventas`,707,1372);
-  if(advisor.amount){const amountText=money(advisor.amount); const size=fitTextWidth(ctx,amountText,540,24,18,'500'); ctx.fillStyle=muted;ctx.font=`500 ${size}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(amountText,707,1412);}
+  roundRect(ctx,690,840,500,175,26,'#fffaf0',goldSoft);
+  ctx.textAlign='center';
+  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RESULTADO DEL MES',940,892);
+  const certSalesSize=fitTextWidth(ctx,`${advisor.sales} ventas`,400,60,38,'700');
+  ctx.fillStyle=navy;ctx.font=`700 ${certSalesSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(`${advisor.sales} ventas`,940,960);
+  if(advisor.amount){const amountText=money(advisor.amount); const size=fitTextWidth(ctx,amountText,420,24,18,'500'); ctx.fillStyle=muted;ctx.font=`500 ${size}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(amountText,940,998);}  
 
-  ctx.fillStyle=gold;ctx.font='700 28px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO AL ESFUERZO',707,1535);
-  ctx.fillStyle=navy;ctx.font='500 34px "Guaruja Neue", Arial, sans-serif';drawWrappedCentered(ctx,DIPLOMA_MOTIVATION,707,1600,915,48,3);
+  roundRect(ctx,1230,840,430,175,26,'#ffffff',goldSoft);
+  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO',1445,892);
+  ctx.fillStyle=navy;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';drawWrappedCentered(ctx,DIPLOMA_MOTIVATION,1445,940,330,38,3);
 
-  ctx.fillStyle=gold;ctx.fillRect(506,1742,402,3);
-  ctx.fillStyle=navy;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',707,1790);
-  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,707,1826);
-  ctx.fillStyle=gold;ctx.font='700 17px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',707,1870);
+  ctx.fillStyle=gold;ctx.fillRect(690,1138,620,3);
+  ctx.fillStyle=navy;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.textAlign='left';ctx.fillText('MARNEZ DESARROLLOS',690,1194);
+  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,690,1226);
+  ctx.textAlign='right';ctx.fillStyle=gold;ctx.font='700 17px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',W-690,1226);
   return canvas;
 }
 
@@ -438,7 +442,8 @@ function canvasToPdfBlob(canvas){
   const base64=jpegDataUrl.split(',')[1];
   const binary=atob(base64);
   const imgLen=binary.length;
-  const pageW=595.28,pageH=841.89,margin=28;
+  const isLandscape=canvas.width>canvas.height;
+  const pageW=isLandscape?841.89:595.28,pageH=isLandscape?595.28:841.89,margin=24;
   const imgW=canvas.width,imgH=canvas.height;
   const scale=Math.min((pageW-margin*2)/imgW,(pageH-margin*2)/imgH);
   const drawW=imgW*scale, drawH=imgH*scale, x=(pageW-drawW)/2, y=(pageH-drawH)/2;
@@ -476,6 +481,7 @@ async function drawAdvisorImage(ctx,advisor,x,y,r,borderColor){
 function fitTextWidth(ctx,text,maxWidth,startSize,minSize,weight='700'){let size=startSize;while(size>minSize){ctx.font=`${weight} ${size}px "Guaruja Neue", Arial, sans-serif`;if(ctx.measureText(text).width<=maxWidth)break;size-=2}return size}
 function getWrappedLines(ctx,text,maxWidth,maxLines=Infinity){const words=String(text).trim().split(/\s+/),lines=[];let line='';words.forEach(word=>{const test=line?`${line} ${word}`:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test});if(line)lines.push(line);if(lines.length<=maxLines)return lines;const trimmed=lines.slice(0,maxLines);let last=trimmed[maxLines-1];while(last.length && ctx.measureText(`${last}…`).width>maxWidth){last=last.slice(0,-1).trim()}trimmed[maxLines-1]=`${last}…`;return trimmed}
 function drawWrappedCentered(ctx,text,centerX,startY,maxWidth,lineHeight,maxLines=Infinity){const lines=getWrappedLines(ctx,text,maxWidth,maxLines);lines.forEach((l,i)=>ctx.fillText(l,centerX,startY+i*lineHeight));return lines.length*lineHeight}
+function drawWrappedAligned(ctx,text,x,startY,maxWidth,lineHeight,maxLines=Infinity,align='left'){const prev=ctx.textAlign;ctx.textAlign=align;const lines=getWrappedLines(ctx,text,maxWidth,maxLines);lines.forEach((l,i)=>ctx.fillText(l,x,startY+i*lineHeight));ctx.textAlign=prev;return lines.length*lineHeight}
 function roundRect(ctx,x,y,w,h,r,fill,stroke){const radius=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+radius,y);ctx.arcTo(x+w,y,x+w,y+h,radius);ctx.arcTo(x+w,y+h,x,y+h,radius);ctx.arcTo(x,y+h,x,y,radius);ctx.arcTo(x,y,x+w,y,radius);ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
 function drawGlow(ctx,x,y,radius,color){const g=ctx.createRadialGradient(x,y,0,x,y,radius);g.addColorStop(0,color);g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill()}
 function drawInitialsAvatar(ctx,name,x,y,r){ctx.save();ctx.fillStyle='#dde1e5';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(initials(name),x,y+4);ctx.restore();ctx.textBaseline='alphabetic'}
