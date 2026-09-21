@@ -758,7 +758,7 @@ export default{
     const url=new URL(request.url),path=url.pathname;
     if(path==='/api/health'){
       await ensureSchema(env);
-      return json({ok:true,version:'0.6.2',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
+      return json({ok:true,version:'0.6.3',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
     }
     if(path==='/api/score')return json(await getScore(env));
 
@@ -817,7 +817,7 @@ export default{
     if(path==='/api/admin/settings'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
       const overview=await adminOverview(env);
-      return json({ok:true,version:'0.6.2',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
+      return json({ok:true,version:'0.6.3',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
     }
     if(path==='/api/sharepoint/status'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
