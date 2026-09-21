@@ -115,7 +115,7 @@ function adminView(){
       <button class="ghost" data-public>Ir a vista asesores →</button>
     </aside>
     <main class="admin-main">
-      <header class="page-header"><div><p class="eyebrow plain">ADMINISTRACIÓN</p><h1>Dashboard de ventas</h1></div><span class="sync-pill"><span></span> ${state.data.sourceStatus==='synced'?'Sincronizado':'Datos demo'}</span></header>
+      <header class="page-header"><div><p class="eyebrow plain">ADMINISTRACIÓN</p><h1>Dashboard de ventas</h1></div><span class="sync-pill"><span></span> ${state.data.sourceStatus==='synced'?'Sincronizado':state.data.sourceStatus==='warning'?'Con alerta':'Datos demo'}</span></header>
       <div class="kpis"><div class="kpi"><b>▥</b><span>Ventas registradas<strong>${a.reduce((s,x)=>s+x.sales,0)}</strong></span></div><div class="kpi"><b>♙</b><span>Asesores activos<strong>${a.length}</strong></span></div><div class="kpi"><b>♛</b><span>Top Seller<strong>${esc(a[0]?.name||'—')}</strong></span></div></div>
       <div class="admin-grid">${ranking(a)}
         <section class="panel settings-card">
@@ -131,8 +131,8 @@ function adminView(){
           <hr>
           <p class="eyebrow plain">SINCRONIZACIÓN</p>
           <h2>SharePoint</h2>
-          <p class="muted">En la siguiente versión conectamos las columnas reales del Excel y mantenemos este mismo diseño con branding Marnez.</p>
-          <button class="secondary" data-sync>↻ Validar conexión</button>
+          <p class="muted">El portal consulta el Excel original compartido, detecta cambios y actualiza el ranking en D1. La sincronización automática corre cada minuto.</p>
+          <button class="secondary" data-sync>↻ Sincronizar ahora</button>
           <pre id="syncResult"></pre>
         </section>
       </div>
@@ -175,13 +175,17 @@ function celebration(){
 async function validateSync(){
   const out=document.getElementById('syncResult');
   if(!out) return;
-  out.textContent='Validando…';
+  out.textContent='Sincronizando…';
   try {
-    const r=await fetch('/api/sharepoint/status');
+    const r=await fetch('/api/sync',{method:'POST'});
     const j=await r.json();
-    out.textContent=j.ok?`Conectado\n${j.name}\nÚltima modificación: ${j.lastModifiedDateTime}`:`Pendiente: ${j.error}`;
-  } catch {
-    out.textContent='No se pudo consultar el estado.';
+    if(!r.ok||!j.ok) throw new Error(j.error||'No se pudo sincronizar');
+    out.textContent=j.changed
+      ? `Actualizado\n${j.parsed?.advisors?.length||0} asesores\n${j.parsed?.usedRows||0} ventas procesadas`
+      : 'Sin cambios en el Excel.';
+    await refreshScore(true);
+  } catch(e) {
+    out.textContent=`Error: ${e.message}`;
   }
 }
 
@@ -211,7 +215,24 @@ window.addEventListener('popstate',()=>{
   render();
 });
 
-fetch('/api/score').then(r=>r.ok?r.json():Promise.reject()).then(d=>{state.data=d;render()}).catch(render);
+let lastScoreSignature='';
+async function refreshScore(forceRender=false){
+  try{
+    const r=await fetch('/api/score',{cache:'no-store'});
+    if(!r.ok) throw new Error('No se pudo cargar el score');
+    const d=await r.json();
+    const sig=JSON.stringify({updatedAt:d.updatedAt,sourceStatus:d.sourceStatus,advisors:d.advisors});
+    if(forceRender || sig!==lastScoreSignature){
+      state.data=d;
+      lastScoreSignature=sig;
+      render();
+    }
+  }catch(e){
+    if(!lastScoreSignature) render();
+  }
+}
+refreshScore(true);
+setInterval(()=>refreshScore(false),30000);
 
 async function downloadRecognitionPng(advisor){
   const dataUrl = await buildRecognitionPng(advisor);

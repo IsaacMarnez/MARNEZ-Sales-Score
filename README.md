@@ -1,68 +1,42 @@
-# MARNEZ Sales Score · V0.1.1
+# MARNEZ Sales Score · V0.2.0
 
-Primera base funcional del portal de ranking comercial.
+Versión conectada al Excel original compartido de SharePoint mediante un vínculo anónimo de solo lectura.
 
-## Ya incluye
-- Vista de asesores y ruta `/admin` dentro del mismo portal.
-- Ranking ordenado automáticamente por ventas.
-- Podio Top 3.
-- Top Seller destacado.
-- Animación de reconocimiento.
-- Descarga del reconocimiento del Top Seller en PNG.
-- Branding MARNEZ aplicado: logos, paleta institucional y tipografías Guaruja Neue.
-- Fotografía opcional; si falta, usa iniciales.
-- Panel administrativo base.
-- D1: esquema para asesores, administradores, histórico y configuración.
-- Endpoint `/api/sharepoint/status` para validar la conexión con el Excel de SharePoint mediante Microsoft Graph.
-- Fallback con datos demo mientras se configura el Excel real.
+## Qué hace
+- Mantiene el mismo Excel original como fuente de verdad.
+- No requiere descargar/subir archivos manualmente.
+- Cloudflare revisa el archivo automáticamente cada minuto.
+- Calcula un hash SHA-256 para detectar si el XLSX cambió.
+- Solo vuelve a procesar el Excel cuando detecta cambios.
+- Busca automáticamente la fila de encabezados con `ASESOR` y `MONTO DE VENTA`.
+- Agrupa ventas por asesor y suma el monto de venta.
+- Si detecta una columna `FECHA` o `MES`, intenta filtrar al mes actual; si no puede determinarlo de forma confiable, procesa las filas disponibles.
+- Guarda el ranking en D1.
+- El frontend consulta `/api/score` cada 30 segundos.
+- Incluye botón `Sincronizar ahora` en administrador.
+- Conserva branding MARNEZ y descarga PNG del reconocimiento Top Seller.
 
-## Pendiente para V0.2.0
-1. Mapear las columnas reales del Excel `reporte marta ongay vendedores del mes.xlsx`.
-2. Descargar y procesar el XLSX automáticamente.
-3. Detectar cambios con `eTag` / `lastModifiedDateTime`.
-4. Persistir cada corte mensual en D1.
-5. Autenticación real y roles de administradores.
-6. Carga de fotografías.
-7. Conectar la gestión real de fotografías/perfiles desde administrador.
+## Configuración requerida en Cloudflare
+Crear un secreto/variable cifrada en el Worker:
 
-## Ejecutar local
-```bash
-npm install
-npm run dev
+`SHAREPOINT_FILE_URL`
+
+Valor: el vínculo compartido del Excel que funciona sin iniciar sesión. No es necesario añadir `download=1`; el Worker lo agrega automáticamente.
+
+No guardar esta URL en GitHub.
+
+## Endpoints
+- `/api/health` — estado de D1 y configuración de SharePoint.
+- `/api/score` — ranking actual.
+- `/api/sharepoint/status` — comprueba si el vínculo devuelve un XLSX válido.
+- `POST /api/sync` — fuerza una sincronización inmediata.
+
+## Automatización
+`wrangler.toml` incluye:
+
+```toml
+[triggers]
+crons = ["* * * * *"]
 ```
 
-## Build
-```bash
-npm run build
-```
-
-## Cloudflare D1
-Crear la base:
-```bash
-npx wrangler d1 create marnez-sales-score-db
-```
-Copiar el `database_id` en `wrangler.toml` y ejecutar:
-```bash
-npx wrangler d1 execute marnez-sales-score-db --remote --file=./migrations/0001_init.sql
-```
-
-## Variables secretas de Microsoft
-No deben guardarse en GitHub. Cargarlas con:
-```bash
-npx wrangler secret put MICROSOFT_TENANT_ID
-npx wrangler secret put MICROSOFT_CLIENT_ID
-npx wrangler secret put MICROSOFT_CLIENT_SECRET
-npx wrangler secret put SHAREPOINT_DRIVE_ID
-npx wrangler secret put SHAREPOINT_ITEM_ID
-```
-
-## Flujo de sincronización diseñado
-1. Consultar metadatos del archivo en SharePoint.
-2. Comparar `eTag` con la última sincronización guardada.
-3. Si cambió: descargar el XLSX.
-4. Transformar filas del Excel a ventas por asesor.
-5. Guardar ranking actual en D1.
-6. Crear/cerrar histórico mensual.
-7. Frontend consulta `/api/score` y actualiza la clasificación.
-
-> Para implementar el paso 4 necesitamos revisar la estructura real del Excel: hojas, columnas y criterio que define una venta válida.
+Esto revisa el Excel una vez por minuto.

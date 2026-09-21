@@ -12,3 +12,7 @@ run_worker_first = ["/api/*"]
 binding = "DB"
 database_name = "marnez-sales-score-db"
 database_id = "99190a2F-24E4-486D-8C73-65B472E5458E"
+
+
+[triggers]
+crons = ["* * * * *"]
