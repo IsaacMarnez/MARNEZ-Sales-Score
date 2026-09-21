@@ -352,84 +352,79 @@ async function buildDiplomaPng(advisor){
 async function buildRecognitionCanvas(advisor){
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;const ctx=canvas.getContext('2d');
   const W=canvas.width,H=canvas.height,CX=W/2;
-  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',ink='#444444',muted='#7a7a7a';
+  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',muted='#7a7a7a';
   ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
-  roundRect(ctx,24,24,W-48,H-48,26,paper,goldSoft);
-  roundRect(ctx,48,48,W-96,H-96,22,null,gold);
-  roundRect(ctx,66,66,W-132,H-132,18,null,'#eadfbe');
+  roundRect(ctx,24,24,W-48,H-48,30,paper,goldSoft);
+  roundRect(ctx,48,48,W-96,H-96,24,null,gold);
 
+  // subtle corner frame
   ctx.strokeStyle=gold;ctx.lineWidth=4;
-  [[88,88,165,88,88,165],[W-88,88,W-165,88,W-88,165],[88,H-88,165,H-88,88,H-165],[W-88,H-88,W-165,H-88,W-88,H-165]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
+  [[92,92,176,92,92,176],[W-92,92,W-176,92,W-92,176],[92,H-92,176,H-92,92,H-176],[W-92,H-92,W-176,H-92,W-92,H-176]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
 
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.035;ctx.drawImage(seal,CX-180,410,360,360);ctx.restore();}
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=250,h=logo.height*(w/logo.width);ctx.drawImage(logo,CX-w/2,104,w,h);}
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);
+  if(logo){const w=235,h=logo.height*(w/logo.width);ctx.drawImage(logo,CX-w/2,88,w,h);}
 
   ctx.textAlign='center';
-  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO ESPECIAL',CX,224);
-  ctx.fillStyle=navy;ctx.font='700 46px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',CX,286);
-  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,CX,323);
-  ctx.fillStyle=gold;ctx.fillRect(CX-135,346,270,3);
+  ctx.fillStyle=gold;ctx.font='700 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,CX,205);
 
-  await drawAdvisorImage(ctx,advisor,CX,460,82,'#ffffff');
-  ctx.lineWidth=4;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(CX,460,94,0,Math.PI*2);ctx.stroke();
+  // Large dominant photo
+  const seal=await loadImageSafe(ASSETS.logoSeal);
+  if(seal){ctx.save();ctx.globalAlpha=.025;ctx.drawImage(seal,CX-290,300,580,580);ctx.restore();}
+  await drawAdvisorImage(ctx,advisor,CX,560,285,'#ffffff');
+  ctx.lineWidth=7;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(CX,560,302,0,Math.PI*2);ctx.stroke();
 
-  ctx.fillStyle=muted;ctx.font='500 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',CX,615);
-  const nameSize=fitTextWidth(ctx,advisor.name,860,62,36,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,CX,690);
+  // Top seller tag
+  roundRect(ctx,345,855,390,72,36,'#f8f3e6',goldSoft);
+  ctx.fillStyle=gold;ctx.font='700 34px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER',CX,902);
 
-  ctx.fillStyle=ink;ctx.font='500 25px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedCentered(ctx,'Por destacar con compromiso, constancia y excelencia en su desempeño comercial dentro de MARNEZ Desarrollos, consolidándose como una figura ejemplar durante este mes.',CX,770,860,38,4);
+  // Name = largest text
+  const nameSize=fitTextWidth(ctx,advisor.name,930,78,46,'700');
+  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,CX,1008);
 
-  roundRect(ctx,170,955,740,130,26,'#f8f3e6',goldSoft);
-  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO AL ESFUERZO',CX,1006);
-  ctx.fillStyle=navy;ctx.font='500 28px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedCentered(ctx,DIPLOMA_MOTIVATION,CX,1055,630,38,2);
+  // Minimal supporting text
+  ctx.fillStyle=muted;ctx.font='500 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento a su excelencia comercial.',CX,1062);
 
-  ctx.fillStyle=gold;ctx.fillRect(245,1176,590,3);
-  ctx.fillStyle=navy;ctx.font='700 20px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',CX,1220);
-  ctx.fillStyle=muted;ctx.font='500 16px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,CX,1252);
+  ctx.fillStyle=gold;ctx.fillRect(250,1168,580,3);
+  ctx.fillStyle=navy;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',CX,1218);
+  ctx.fillStyle=muted;ctx.font='500 16px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento corporativo',CX,1250);
   return canvas;
 }
 
 async function buildDiplomaCanvas(advisor){
   const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=1414;const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,CX=W/2;
-  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',ink='#444444',muted='#7a7a7a';
+  const W=canvas.width,H=canvas.height;
+  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',muted='#7a7a7a';
   ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
-  roundRect(ctx,36,36,W-72,H-72,26,paper,goldSoft);
+  roundRect(ctx,36,36,W-72,H-72,28,paper,goldSoft);
   roundRect(ctx,64,64,W-128,H-128,22,null,gold);
-  roundRect(ctx,88,88,W-176,H-176,18,null,'#eadfbe');
-
   ctx.strokeStyle=gold;ctx.lineWidth=5;
   [[132,132,226,132,132,226],[W-132,132,W-226,132,W-132,226],[132,H-132,226,H-132,132,H-226],[W-132,H-132,W-226,H-132,W-132,H-226]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
 
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.03;ctx.drawImage(seal,CX-230,370,460,460);ctx.restore();}
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=330,h=logo.height*(w/logo.width);ctx.drawImage(logo,CX-w/2,126,w,h);}
+  // Left photo dominates
+  const seal=await loadImageSafe(ASSETS.logoSeal);
+  if(seal){ctx.save();ctx.globalAlpha=.025;ctx.drawImage(seal,140,285,640,640);ctx.restore();}
+  await drawAdvisorImage(ctx,advisor,470,708,305,'#ffffff');
+  ctx.lineWidth=7;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(470,708,322,0,Math.PI*2);ctx.stroke();
 
-  ctx.textAlign='center';
-  ctx.fillStyle=gold;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('DIPLOMA DE RECONOCIMIENTO',CX,248);
-  ctx.fillStyle=navy;ctx.font='700 58px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',CX,320);
-  ctx.fillStyle=muted;ctx.font='500 21px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,CX,362);
-  ctx.fillStyle=gold;ctx.fillRect(CX-190,388,380,3);
+  // Right editorial block
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);
+  if(logo){const w=280,h=logo.height*(w/logo.width);ctx.drawImage(logo,1010,152,w,h);}
+  ctx.textAlign='left';
+  ctx.fillStyle=gold;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,1010,302);
 
-  await drawAdvisorImage(ctx,advisor,CX,505,88,'#ffffff');
-  ctx.lineWidth=4;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(CX,505,100,0,Math.PI*2);ctx.stroke();
+  const nameSize=fitTextWidth(ctx,advisor.name,780,90,52,'700');
+  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,1010,500);
+  ctx.fillStyle=gold;ctx.font='700 58px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER',1010,590);
+  ctx.fillStyle=muted;ctx.font='500 32px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento a su excelencia comercial.',1010,665);
 
-  ctx.fillStyle=muted;ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Se otorga el presente reconocimiento a',CX,655);
-  const nameSize=fitTextWidth(ctx,advisor.name,1280,76,44,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,CX,752);
+  // minimal phrase block
+  roundRect(ctx,1010,760,720,145,26,'#f8f3e6',goldSoft);
+  ctx.fillStyle=navy;ctx.font='500 34px "Guaruja Neue", Arial, sans-serif';
+  drawWrappedAligned(ctx,'Tu constancia y dedicación inspiran resultados extraordinarios.',1050,825,640,42,2,'left');
 
-  ctx.fillStyle=ink;ctx.font='500 31px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedCentered(ctx,'Por destacar con compromiso, constancia y excelencia en su desempeño comercial dentro de MARNEZ Desarrollos, consolidándose como referente de dedicación y profesionalismo durante este mes.',CX,842,1180,46,3);
-
-  roundRect(ctx,475,1015,1050,145,28,'#f8f3e6',goldSoft);
-  ctx.fillStyle=gold;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('RECONOCIMIENTO AL ESFUERZO',CX,1064);
-  ctx.fillStyle=navy;ctx.font='500 33px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedCentered(ctx,DIPLOMA_MOTIVATION,CX,1116,920,44,2);
-
-  ctx.fillStyle=gold;ctx.fillRect(610,1245,780,3);
-  ctx.fillStyle=navy;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',CX,1294);
-  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,CX,1330);
+  ctx.fillStyle=gold;ctx.fillRect(1010,1078,620,3);
+  ctx.fillStyle=navy;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',1010,1130);
+  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento corporativo',1010,1165);
   return canvas;
 }
 
