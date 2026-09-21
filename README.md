@@ -1,49 +1,65 @@
-# MARNEZ Sales Score · V0.2.1
+# MARNEZ Sales Score · V0.3.0
 
-Versión conectada al Excel original compartido de SharePoint mediante un vínculo anónimo de solo lectura.
+Portal de ranking comercial conectado a D1 y preparado para sincronizar el Excel original de SharePoint.
 
-## Qué hace
-- Mantiene el mismo Excel original como fuente de verdad.
-- No requiere descargar/subir archivos manualmente.
-- Cloudflare revisa el archivo automáticamente cada minuto.
-- Calcula un hash SHA-256 para detectar si el XLSX cambió.
-- Solo vuelve a procesar el Excel cuando detecta cambios.
-- Busca automáticamente la fila de encabezados con `ASESOR` y `MONTO DE VENTA`.
-- Agrupa ventas por asesor y suma el monto de venta.
-- Si detecta una columna `FECHA` o `MES`, intenta filtrar al mes actual; si no puede determinarlo de forma confiable, procesa las filas disponibles.
-- Guarda el ranking en D1.
-- El frontend consulta `/api/score` cada 30 segundos.
-- Incluye botón `Sincronizar ahora` en administrador.
-- Conserva branding MARNEZ y descarga PNG del reconocimiento Top Seller.
+## Novedades V0.3.0
+- Administrador con navegación funcional: Dashboard, Asesores, Top Seller, Historial, Usuarios y Configuración.
+- Separación entre **ranking real** y **ranking público**.
+- Las ventas del Excel nunca se alteran para modificar el reconocimiento.
+- Por asesor se puede configurar:
+  - Participa en ranking: Sí / No.
+  - Elegible para Top Seller: Sí / No.
+  - Mostrar en portal público: Sí / No.
+  - Nombre visible.
+  - URL de fotografía.
+  - Motivo o nota interna de exclusión.
+- El Top Seller público se calcula solo entre asesores elegibles.
+- Las preferencias administrativas permanecen en D1 aunque el Excel vuelva a sincronizarse.
+- Vista previa, animación y descarga PNG del Top Seller.
+- Historial mensual basado en `monthly_rankings`.
+- Registro de usuarios y roles en D1.
+- El Worker crea automáticamente las nuevas columnas de V0.3.0 si aún no existen.
 
-## Configuración requerida en Cloudflare
-Crear un secreto/variable cifrada en el Worker:
+## Caso Diana / Coordinación
+En Administrador → Asesores, desactiva:
+- `Participa en ranking`
+- `Elegible para Top Seller`
 
-`SHAREPOINT_FILE_URL`
+Las ventas de Diana seguirán apareciendo en el **Ranking real** del administrador, pero no ocupará una posición en el ranking público ni recibirá el reconocimiento Top Seller.
 
-Valor: el vínculo compartido del Excel que funciona sin iniciar sesión. No es necesario añadir `download=1`; el Worker lo agrega automáticamente.
+## Importante sobre Usuarios
+La V0.3.0 permite registrar usuarios y roles (`superadmin`, `admin`, `viewer`) en D1. La autenticación/login y la aplicación efectiva de permisos por usuario todavía no están activadas; esa capa debe añadirse antes de considerar el panel administrador protegido.
 
-No guardar esta URL en GitHub.
+## Variables de Cloudflare
+Mantener `SHAREPOINT_FILE_URL` como Secret/Variable de runtime en Cloudflare. No guardar el vínculo compartido en GitHub.
 
-## Endpoints
-- `/api/health` — estado de D1 y configuración de SharePoint.
-- `/api/score` — ranking actual.
-- `/api/sharepoint/status` — comprueba si el vínculo devuelve un XLSX válido.
-- `POST /api/sync` — fuerza una sincronización inmediata.
-
-## Automatización
-`wrangler.toml` incluye:
-
+## D1
+Binding esperado:
 ```toml
-[triggers]
-crons = ["* * * * *"]
+[[d1_databases]]
+binding = "DB"
+database_name = "marnez-sales-score-db"
+database_id = "99190a2F-24E4-486D-8C73-65B472E5458E"
 ```
 
-Esto revisa el Excel una vez por minuto.
+El archivo `migrations/0002_advisor_ranking_controls.sql` documenta las columnas nuevas. No es obligatorio ejecutarlo manualmente porque el Worker valida y agrega las columnas faltantes al iniciar.
 
+## Endpoints nuevos
+- `GET /api/admin/overview`
+- `GET /api/admin/advisors`
+- `PATCH /api/admin/advisors/:id`
+- `GET /api/admin/history`
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `PATCH /api/admin/users/:id`
+- `GET /api/admin/settings`
 
-## Corrección 0.2.1
-- Maneja manualmente las redirecciones de vínculos anónimos de SharePoint.
-- Conserva las cookies temporales de invitado entre redirecciones, como un navegador.
-- Usa encabezados de navegador para evitar rechazos del enlace compartido.
-- Agrega `/api/sharepoint/diagnostic` para ver únicamente estados/hosts de la cadena, sin exponer cookies ni el vínculo secreto.
+## Verificación
+Después del despliegue:
+```text
+/api/health
+```
+Debe indicar:
+```json
+{"ok":true,"version":"0.3.0","d1":true,"sharepointConfigured":true}
+```

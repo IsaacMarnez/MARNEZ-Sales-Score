@@ -377,14 +377,71 @@ async function maybeSync(env){
   }
 }
 
-async function getScore(env){
-  if(!env.DB)return{month:new Date().toISOString().slice(0,7),updatedAt:nowIso(),sourceStatus:'demo',advisors:demo};
-  await maybeSync(env);
-  const rows=await env.DB.prepare(`SELECT id,name,sales,amount,photo_url AS photoUrl,previous_position AS previousPosition
+let schemaReady=false;
+async function ensureSchema(env){
+  if(schemaReady || !env.DB)return;
+  const info=await env.DB.prepare('PRAGMA table_info(advisors)').all();
+  const cols=new Set((info.results||[]).map(x=>x.name));
+  const additions=[
+    ['ranking_enabled','INTEGER NOT NULL DEFAULT 1'],
+    ['top_seller_eligible','INTEGER NOT NULL DEFAULT 1'],
+    ['public_visible','INTEGER NOT NULL DEFAULT 1'],
+    ['exclusion_reason','TEXT'],
+    ['display_name','TEXT']
+  ];
+  for(const [name,type] of additions){
+    if(!cols.has(name)){
+      try{await env.DB.prepare(`ALTER TABLE advisors ADD COLUMN ${name} ${type}`).run();}
+      catch(e){if(!String(e.message||e).toLowerCase().includes('duplicate column'))throw e;}
+    }
+  }
+  schemaReady=true;
+}
+
+function mapAdvisorRow(x){
+  return {
+    id:x.id,
+    name:x.displayName||x.name,
+    sourceName:x.name,
+    sales:Number(x.sales||0),
+    amount:Number(x.amount||0),
+    photoUrl:x.photoUrl||null,
+    previousPosition:x.previousPosition==null?null:Number(x.previousPosition),
+    rankingEnabled:Number(x.rankingEnabled??1)===1,
+    topSellerEligible:Number(x.topSellerEligible??1)===1,
+    publicVisible:Number(x.publicVisible??1)===1,
+    exclusionReason:x.exclusionReason||''
+  };
+}
+
+async function allActiveAdvisors(env){
+  await ensureSchema(env);
+  const rows=await env.DB.prepare(`SELECT id,name,display_name AS displayName,sales,amount,photo_url AS photoUrl,
+    previous_position AS previousPosition,ranking_enabled AS rankingEnabled,
+    top_seller_eligible AS topSellerEligible,public_visible AS publicVisible,
+    exclusion_reason AS exclusionReason
     FROM advisors WHERE active=1 ORDER BY sales DESC,amount DESC,name ASC`).all();
+  return (rows.results||[]).map(mapAdvisorRow).map((a,i)=>({...a,actualPosition:i+1}));
+}
+
+function publicRankingFrom(all){
+  const eligible=all.filter(a=>a.publicVisible && a.rankingEnabled);
+  return eligible.map((a,i)=>({...a,publicPosition:i+1}));
+}
+
+function recognizedTopSeller(publicRank){
+  return publicRank.find(a=>a.topSellerEligible)||null;
+}
+
+async function getScore(env){
+  if(!env.DB)return{month:new Date().toISOString().slice(0,7),updatedAt:nowIso(),sourceStatus:'demo',advisors:demo,topSeller:demo[0]};
+  await ensureSchema(env);
+  await maybeSync(env);
+  const all=await allActiveAdvisors(env);
+  const publicRank=publicRankingFrom(all);
   const updatedAt=await getSetting(env,'last_sync_at')||nowIso();
   const syncError=await getSetting(env,'last_sync_error');
-  const sourceStatus=rows.results?.length?(syncError?'warning':'synced'):'demo';
+  const sourceStatus=all.length?(syncError?'warning':'synced'):'demo';
   return {
     month:new Date().toISOString().slice(0,7),updatedAt,sourceStatus,
     sourceMeta:{
@@ -394,11 +451,13 @@ async function getScore(env){
       monthFilter:await getSetting(env,'month_filter'),
       error:syncError||null
     },
-    advisors:rows.results?.length?rows.results:demo
+    advisors:publicRank.length?publicRank:[],
+    topSeller:recognizedTopSeller(publicRank)
   };
 }
 
 async function sourceStatus(env){
+  await ensureSchema(env);
   const base={configured:!!env.SHAREPOINT_FILE_URL,lastSyncAt:await getSetting(env,'last_sync_at'),lastError:await getSetting(env,'last_sync_error')};
   if(!env.SHAREPOINT_FILE_URL)return {ok:false,...base,error:'Falta SHAREPOINT_FILE_URL'};
   try{
@@ -407,25 +466,135 @@ async function sourceStatus(env){
   }catch(e){return {ok:false,...base,error:e.message};}
 }
 
+async function adminOverview(env){
+  const all=await allActiveAdvisors(env);
+  const publicRank=publicRankingFrom(all);
+  return {
+    ok:true,
+    realRanking:all,
+    publicRanking:publicRank,
+    realLeader:all[0]||null,
+    topSeller:recognizedTopSeller(publicRank),
+    totals:{sales:all.reduce((s,a)=>s+a.sales,0),advisors:all.length,publicAdvisors:publicRank.length},
+    source:{
+      lastSyncAt:await getSetting(env,'last_sync_at'),
+      lastError:await getSetting(env,'last_sync_error'),
+      sheet:await getSetting(env,'source_sheet'),
+      rows:Number(await getSetting(env,'source_rows')||0),
+      usedRows:Number(await getSetting(env,'source_used_rows')||0),
+      monthFilter:await getSetting(env,'month_filter')
+    }
+  };
+}
+
+async function updateAdvisor(env,id,body){
+  await ensureSchema(env);
+  const current=await env.DB.prepare('SELECT * FROM advisors WHERE id=?').bind(id).first();
+  if(!current)return {ok:false,error:'Asesor no encontrado'};
+  const rankingEnabled=body.rankingEnabled==null?Number(current.ranking_enabled??1):(body.rankingEnabled?1:0);
+  const topSellerEligible=body.topSellerEligible==null?Number(current.top_seller_eligible??1):(body.topSellerEligible?1:0);
+  const publicVisible=body.publicVisible==null?Number(current.public_visible??1):(body.publicVisible?1:0);
+  const displayName=body.displayName===undefined?current.display_name:String(body.displayName||'').trim()||null;
+  const photoUrl=body.photoUrl===undefined?current.photo_url:String(body.photoUrl||'').trim()||null;
+  const exclusionReason=body.exclusionReason===undefined?current.exclusion_reason:String(body.exclusionReason||'').trim()||null;
+  await env.DB.prepare(`UPDATE advisors SET ranking_enabled=?,top_seller_eligible=?,public_visible=?,display_name=?,photo_url=?,exclusion_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .bind(rankingEnabled,topSellerEligible,publicVisible,displayName,photoUrl,exclusionReason,id).run();
+  const row=await env.DB.prepare(`SELECT id,name,display_name AS displayName,sales,amount,photo_url AS photoUrl,previous_position AS previousPosition,
+      ranking_enabled AS rankingEnabled,top_seller_eligible AS topSellerEligible,public_visible AS publicVisible,exclusion_reason AS exclusionReason
+      FROM advisors WHERE id=?`).bind(id).first();
+  return {ok:true,advisor:mapAdvisorRow(row)};
+}
+
+async function historyData(env){
+  await ensureSchema(env);
+  const rows=await env.DB.prepare(`SELECT r.month,r.position,r.sales,r.amount,r.captured_at AS capturedAt,
+      a.id AS advisorId,COALESCE(NULLIF(a.display_name,''),a.name) AS advisorName
+      FROM monthly_rankings r LEFT JOIN advisors a ON a.id=r.advisor_id
+      ORDER BY r.month DESC,r.position ASC`).all();
+  const groups={};
+  for(const row of rows.results||[]){
+    (groups[row.month]??=[]).push({advisorId:row.advisorId,advisorName:row.advisorName||row.advisorId,position:Number(row.position),sales:Number(row.sales),amount:Number(row.amount||0),capturedAt:row.capturedAt});
+  }
+  return {ok:true,months:Object.entries(groups).map(([month,ranking])=>({month,ranking}))};
+}
+
+async function listAdmins(env){
+  const rows=await env.DB.prepare('SELECT id,email,name,role,active,created_at AS createdAt FROM admins ORDER BY active DESC,name ASC,email ASC').all();
+  return {ok:true,users:rows.results||[]};
+}
+
+async function createAdmin(env,body){
+  const email=String(body.email||'').trim().toLowerCase();
+  if(!email || !email.includes('@'))return {ok:false,error:'Ingresa un correo válido.'};
+  const name=String(body.name||'').trim();
+  const role=['superadmin','admin','viewer'].includes(body.role)?body.role:'admin';
+  const id=crypto.randomUUID();
+  try{
+    await env.DB.prepare('INSERT INTO admins(id,email,name,role,active) VALUES(?,?,?,?,1)').bind(id,email,name,role).run();
+    return {ok:true,user:{id,email,name,role,active:1}};
+  }catch(e){return {ok:false,error:e.message.includes('UNIQUE')?'Ese correo ya está registrado.':e.message};}
+}
+
+async function updateAdmin(env,id,body){
+  const current=await env.DB.prepare('SELECT * FROM admins WHERE id=?').bind(id).first();
+  if(!current)return {ok:false,error:'Usuario no encontrado'};
+  const role=body.role===undefined?current.role:(['superadmin','admin','viewer'].includes(body.role)?body.role:current.role);
+  const active=body.active===undefined?Number(current.active):(body.active?1:0);
+  const name=body.name===undefined?current.name:String(body.name||'').trim();
+  await env.DB.prepare('UPDATE admins SET name=?,role=?,active=? WHERE id=?').bind(name,role,active,id).run();
+  return {ok:true};
+}
+
+async function readJson(request){
+  try{return await request.json();}catch{return {};}
+}
+
 export default{
   async fetch(request,env){
     const url=new URL(request.url);
-    if(url.pathname==='/api/health')return json({ok:true,version:'0.2.1',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
-    if(url.pathname==='/api/score')return json(await getScore(env));
-    if(url.pathname==='/api/sharepoint/status')return json(await sourceStatus(env));
-    if(url.pathname==='/api/sharepoint/diagnostic'){
+    const path=url.pathname;
+    if(path==='/api/health'){
+      await ensureSchema(env);
+      return json({ok:true,version:'0.3.0',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL});
+    }
+    if(path==='/api/score')return json(await getScore(env));
+    if(path==='/api/admin/overview')return json(await adminOverview(env));
+    if(path==='/api/admin/advisors' && request.method==='GET')return json({ok:true,advisors:await allActiveAdvisors(env)});
+    if(path.startsWith('/api/admin/advisors/') && request.method==='PATCH'){
+      const id=decodeURIComponent(path.slice('/api/admin/advisors/'.length));
+      const result=await updateAdvisor(env,id,await readJson(request));
+      return json(result,result.ok?200:404);
+    }
+    if(path==='/api/admin/history')return json(await historyData(env));
+    if(path==='/api/admin/users' && request.method==='GET')return json(await listAdmins(env));
+    if(path==='/api/admin/users' && request.method==='POST'){
+      const result=await createAdmin(env,await readJson(request));
+      return json(result,result.ok?200:400);
+    }
+    if(path.startsWith('/api/admin/users/') && request.method==='PATCH'){
+      const id=decodeURIComponent(path.slice('/api/admin/users/'.length));
+      const result=await updateAdmin(env,id,await readJson(request));
+      return json(result,result.ok?200:404);
+    }
+    if(path==='/api/admin/settings'){
+      const overview=await adminOverview(env);
+      return json({ok:true,version:'0.3.0',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source});
+    }
+    if(path==='/api/sharepoint/status')return json(await sourceStatus(env));
+    if(path==='/api/sharepoint/diagnostic'){
       if(!env.SHAREPOINT_FILE_URL)return json({ok:false,error:'Falta SHAREPOINT_FILE_URL'});
       try{const {buffer,trace,contentType}=await downloadSource(env,{includeTrace:true});return json({ok:true,size:buffer.byteLength,contentType,trace});}
       catch(e){return json({ok:false,error:e.message,trace:e.trace||[]},500);}
     }
-    if(url.pathname==='/api/sync'){
-      if(request.method!=='POST')return json({ok:false,error:'Usa POST' },405);
+    if(path==='/api/sync' && request.method==='POST'){
       try{return json(await syncFromSharePoint(env,{force:true}));}
       catch(e){await setSetting(env,'last_sync_error',e.message);return json({ok:false,error:e.message},500);}
     }
     return env.ASSETS.fetch(request);
   },
-  async scheduled(_event,env,ctx){
-    ctx.waitUntil(syncFromSharePoint(env).catch(e=>setSetting(env,'last_sync_error',e.message)));
+  async scheduled(event,env,ctx){
+    ctx.waitUntil((async()=>{
+      try{await ensureSchema(env);await syncFromSharePoint(env);}catch(e){if(env.DB)await setSetting(env,'last_sync_error',e.message);}
+    })());
   }
 };
