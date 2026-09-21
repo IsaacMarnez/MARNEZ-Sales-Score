@@ -19,7 +19,7 @@ const DIPLOMA_MOTIVATION='Tu constancia, enfoque y dedicación convierten el esf
 const esc=(s='')=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const initials=n=>String(n||'').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
 const money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n||0));
-const avatar=(a,large=false)=>a?.photoUrl?`<img class="avatar ${large?'avatar-large':''}" src="${esc(a.photoUrl)}" alt="${esc(a.name)}">`:`<div class="avatar avatar-fallback ${large?'avatar-large':''}">${initials(a?.name)}</div>`;
+const avatar=(a,large=false)=>a?.photoUrl?`<span class="avatar avatar-photo ${large?'avatar-large':''}"><img class="avatar-image" src="${esc(a.photoUrl)}" alt=""><span class="avatar-fallback-inner">${initials(a?.name)}</span></span>`:`<div class="avatar avatar-fallback ${large?'avatar-large':''}">${initials(a?.name)}</div>`;
 const movement=(a,p)=>!a.previousPosition?'—':a.previousPosition-p>0?`↑ ${a.previousPosition-p}`:a.previousPosition-p<0?`↓ ${Math.abs(a.previousPosition-p)}`:'—';
 const movementClass=t=>t.startsWith('↑')?'up':t.startsWith('↓')?'down':'muted';
 const isAdmin=()=>location.pathname.startsWith('/admin');
@@ -129,9 +129,11 @@ async function advisorsView(){
   try{
     const data=await fetchJson('/api/admin/advisors');
     const canEdit=canEditAdmin();
-    const cards=(data.advisors||[]).map(a=>`<article class="advisor-admin-card" data-advisor-id="${esc(a.id)}"><div class="advisor-admin-head">${avatar(a)}<div><strong>${esc(a.name)}</strong><span>${a.sales} ventas · ${money(a.amount)}</span></div><span class="position-badge">#${a.actualPosition||'—'} real</span></div><div class="advisor-form-grid"><label>Nombre visible<input data-field="displayName" ${canEdit?'':'disabled'} value="${esc(a.name===a.sourceName?'':a.name)}" placeholder="${esc(a.sourceName)}"></label><label>URL de fotografía<input data-field="photoUrl" ${canEdit?'':'disabled'} value="${esc(a.photoUrl||'')}" placeholder="https://..."></label><label class="wide">Motivo / nota interna<input data-field="exclusionReason" ${canEdit?'':'disabled'} value="${esc(a.exclusionReason||'')}" placeholder="Ej. Coordinación comercial"></label></div><div class="toggle-grid"><label class="toggle-line"><span><strong>Participa en ranking</strong><small>Si está desactivado, sus ventas siguen en el ranking real pero no ocupan posición pública.</small></span><input type="checkbox" data-field="rankingEnabled" ${a.rankingEnabled?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Elegible para Top Seller</strong><small>Puede aparecer en ranking sin recibir el reconocimiento.</small></span><input type="checkbox" data-field="topSellerEligible" ${a.topSellerEligible?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Mostrar en portal público</strong><small>Oculta completamente al asesor de la vista pública.</small></span><input type="checkbox" data-field="publicVisible" ${a.publicVisible?'checked':''} ${canEdit?'':'disabled'}><i></i></label></div><div class="card-actions"><span class="save-status"></span>${canEdit?'<button class="primary compact-primary" data-save-advisor>Guardar cambios</button>':'<span class="viewer-note">Solo lectura</span>'}</div></article>`).join('');
+    const cards=(data.advisors||[]).map(a=>`<article class="advisor-admin-card" data-advisor-id="${esc(a.id)}"><div class="advisor-admin-head">${avatar(a)}<div><strong>${esc(a.name)}</strong><span>${a.sales} ventas · ${money(a.amount)}</span></div><span class="position-badge">#${a.actualPosition||'—'} real</span></div><div class="advisor-form-grid"><label>Nombre visible<input data-field="displayName" ${canEdit?'':'disabled'} value="${esc(a.name===a.sourceName?'':a.name)}" placeholder="${esc(a.sourceName)}"></label><label>Fotografía<input type="hidden" data-field="photoUrl" value="${esc(a.photoUrl||'')}"><div class="photo-upload-row"><label class="photo-upload-button ${canEdit?'':'disabled'}">Subir fotografía<input type="file" data-photo-file accept="image/png,image/jpeg,image/webp" ${canEdit?'':'disabled'}></label>${canEdit?'<button class="secondary small-button" type="button" data-remove-photo>Quitar</button>':''}</div><small class="photo-help">El portal la optimiza y la guarda para que no dependa de enlaces externos.</small></label><label class="wide">Motivo / nota interna<input data-field="exclusionReason" ${canEdit?'':'disabled'} value="${esc(a.exclusionReason||'')}" placeholder="Ej. Coordinación comercial"></label></div><div class="toggle-grid"><label class="toggle-line"><span><strong>Participa en ranking</strong><small>Si está desactivado, sus ventas siguen en el ranking real pero no ocupan posición pública.</small></span><input type="checkbox" data-field="rankingEnabled" ${a.rankingEnabled?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Elegible para Top Seller</strong><small>Puede aparecer en ranking sin recibir el reconocimiento.</small></span><input type="checkbox" data-field="topSellerEligible" ${a.topSellerEligible?'checked':''} ${canEdit?'':'disabled'}><i></i></label><label class="toggle-line"><span><strong>Mostrar en portal público</strong><small>Oculta completamente al asesor de la vista pública.</small></span><input type="checkbox" data-field="publicVisible" ${a.publicVisible?'checked':''} ${canEdit?'':'disabled'}><i></i></label></div><div class="card-actions"><span class="save-status"></span>${canEdit?'<button class="primary compact-primary" data-save-advisor>Guardar cambios</button>':'<span class="viewer-note">Solo lectura</span>'}</div></article>`).join('');
     adminFrame('advisors','Asesores','Configura quién participa sin alterar las ventas del Excel.',`<div class="info-banner"><strong>Ejemplo para Diana:</strong> desactiva “Participa en ranking” y “Elegible para Top Seller”. Sus ventas seguirán visibles en el ranking real del administrador, pero no competirán por el reconocimiento.</div><section class="advisor-admin-list">${cards||'<div class="panel">Aún no hay asesores sincronizados.</div>'}</section>`);
     document.querySelectorAll('[data-save-advisor]').forEach(btn=>btn.addEventListener('click',()=>saveAdvisor(btn)));
+    document.querySelectorAll('[data-photo-file]').forEach(input=>input.addEventListener('change',()=>handleAdvisorPhoto(input)));
+    document.querySelectorAll('[data-remove-photo]').forEach(btn=>btn.addEventListener('click',()=>removeAdvisorPhoto(btn)));
   }catch(e){adminError('advisors','Asesores',e);}
 }
 
@@ -196,6 +198,7 @@ function render(){
 
 function navigate(path){history.pushState({},'',path);render()}
 function wireCommon(){
+  wireAvatarFallbacks();
   document.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.nav)));
   document.querySelector('[data-logout]')?.addEventListener('click',logout);
   document.querySelector('[data-celebrate]')?.addEventListener('click',celebration);
@@ -212,6 +215,60 @@ async function fetchJson(url,throwOnHttp=true,options={}){
   }
   if(throwOnHttp && (!r.ok || j.ok===false))throw new Error(j.error||`HTTP ${r.status}`);
   return j;
+}
+
+function wireAvatarFallbacks(scope=document){
+  scope.querySelectorAll('.avatar-photo .avatar-image').forEach(img=>{
+    const wrapper=img.closest('.avatar-photo');
+    const fail=()=>wrapper?.classList.add('is-broken');
+    if(img.complete && img.naturalWidth===0)fail();
+    else img.addEventListener('error',fail,{once:true});
+  });
+}
+
+async function handleAdvisorPhoto(input){
+  const file=input.files?.[0]; if(!file)return;
+  const card=input.closest('[data-advisor-id]');
+  const status=card?.querySelector('.save-status');
+  try{
+    if(status)status.textContent='Procesando fotografía…';
+    const dataUrl=await compressAdvisorPhoto(file);
+    const field=card.querySelector('[data-field="photoUrl"]');field.value=dataUrl;
+    const name=(card.querySelector('[data-field="displayName"]')?.value||card.querySelector('.advisor-admin-head strong')?.textContent||'Asesor').trim();
+    const current=card.querySelector('.advisor-admin-head .avatar');
+    if(current){current.outerHTML=avatar({name,photoUrl:dataUrl});wireAvatarFallbacks(card);}
+    if(status)status.textContent='Foto lista · guarda los cambios';
+  }catch(e){if(status)status.textContent=`Foto no válida: ${e.message}`;input.value='';}
+}
+
+function removeAdvisorPhoto(btn){
+  const card=btn.closest('[data-advisor-id]');if(!card)return;
+  const field=card.querySelector('[data-field="photoUrl"]');if(field)field.value='';
+  const name=(card.querySelector('[data-field="displayName"]')?.value||card.querySelector('.advisor-admin-head strong')?.textContent||'Asesor').trim();
+  const current=card.querySelector('.advisor-admin-head .avatar');if(current)current.outerHTML=avatar({name,photoUrl:null});
+  const file=card.querySelector('[data-photo-file]');if(file)file.value='';
+  const status=card.querySelector('.save-status');if(status)status.textContent='Foto eliminada · guarda los cambios';
+}
+
+async function compressAdvisorPhoto(file){
+  if(!file.type.startsWith('image/'))throw new Error('selecciona una imagen JPG, PNG o WebP');
+  if(file.size>10*1024*1024)throw new Error('la imagen supera 10 MB');
+  const img=await fileToImage(file);
+  const side=Math.min(img.width,img.height), sx=(img.width-side)/2, sy=(img.height-side)/2;
+  const canvas=document.createElement('canvas');canvas.width=360;canvas.height=360;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#e9e9e9';ctx.fillRect(0,0,360,360);ctx.drawImage(img,sx,sy,side,side,0,0,360,360);
+  let data=canvas.toDataURL('image/webp',0.82);
+  if(!data.startsWith('data:image/webp'))data=canvas.toDataURL('image/jpeg',0.84);
+  return data;
+}
+
+function fileToImage(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(url);resolve(img)};
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('no pude leer el archivo'))};
+    img.src=url;
+  });
 }
 
 async function validateSync(){
