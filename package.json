@@ -1,0 +1,13 @@
+{
+  "name": "marnez-sales-score",
+  "private": true,
+  "version": "0.7.3",
+  "type": "module",
+  "scripts": {
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}

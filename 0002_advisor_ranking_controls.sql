@@ -1,0 +1,5 @@
+ALTER TABLE advisors ADD COLUMN ranking_enabled INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE advisors ADD COLUMN top_seller_eligible INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE advisors ADD COLUMN public_visible INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE advisors ADD COLUMN exclusion_reason TEXT;
+ALTER TABLE advisors ADD COLUMN display_name TEXT;
