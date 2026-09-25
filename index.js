@@ -1,5 +1,7 @@
 import { unzipSync, strFromU8 } from 'fflate';
 
+const APP_VERSION='0.7.3';
+
 const demo=[
   {id:'1',name:'Marta Ongay',sales:11,previousPosition:2,amount:0},
   {id:'2',name:'Andrea Torres',sales:9,previousPosition:1,amount:0},
@@ -758,7 +760,7 @@ export default{
     const url=new URL(request.url),path=url.pathname;
     if(path==='/api/health'){
       await ensureSchema(env);
-      return json({ok:true,version:'0.7.2',d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
+      return json({ok:true,version:APP_VERSION,d1:!!env.DB,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,authConfigured:env.DB?await authConfigured(env):false});
     }
     if(path==='/api/score')return json(await getScore(env));
 
@@ -817,7 +819,7 @@ export default{
     if(path==='/api/admin/settings'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
       const overview=await adminOverview(env);
-      return json({ok:true,version:'0.7.2',sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
+      return json({ok:true,version:APP_VERSION,sharepointConfigured:!!env.SHAREPOINT_FILE_URL,d1:!!env.DB,source:overview.source,authUser:auth.user});
     }
     if(path==='/api/sharepoint/status'){
       const auth=await requireUser(request,env);if(auth.response)return auth.response;
@@ -842,7 +844,7 @@ export default{
       headers.set('Pragma','no-cache');
       headers.set('Expires','0');
     }
-    headers.set('X-Marnez-Version','0.7.2');
+    headers.set('X-Marnez-Version',APP_VERSION);
     return new Response(assetResponse.body,{status:assetResponse.status,statusText:assetResponse.statusText,headers});
   },
   async scheduled(event,env,ctx){
