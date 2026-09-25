@@ -29,14 +29,14 @@ function brand(mode='default'){
   return `<div class="brand brand-${mode}"><img src="${ASSETS.logoHorizontal}" alt="Marnez Desarrollos" class="brand-logo ${mode==='compact'?'compact':''}"></div>`;
 }
 
-function ranking(advisors,{title='Sales Score',topSellerId=null,eyebrow='RANKING ACTUAL',showAwardDownloads=false}={}){
+function ranking(advisors,{title='Sales Score',topSellerId=null,eyebrow='RANKING ACTUAL'}={}){
   if(!advisors?.length)return `<section class="panel empty-panel"><p class="eyebrow plain">${eyebrow}</p><h2>${title}</h2><p>No hay asesores elegibles para mostrar en este ranking.</p></section>`;
-  return `<section class="panel ranking-panel"><div class="panel-title"><div><p class="eyebrow plain">${eyebrow}</p><h2>${title}</h2></div><span class="icon">🏆</span></div><div class="table-head"><span>#</span><span>Asesor</span><span>Movimiento</span><span>Ventas</span></div>${advisors.map((a,i)=>{const m=movement(a,i+1),rank=i+1;const direct=showAwardDownloads&&[2,3].includes(rank)?`<div class="rank-award-actions"><button class="rank-download-btn" data-award-download="png" data-award-rank="${rank}" data-advisor-id="${esc(a.id)}">PNG</button><button class="rank-download-btn" data-award-download="pdf" data-award-rank="${rank}" data-advisor-id="${esc(a.id)}">PDF</button></div>`:'';return `<div class="rank-row ${String(a.id)===String(topSellerId)?'leader':''}"><span class="rank-number">${String(rank).padStart(2,'0')}</span><div class="advisor-cell">${avatar(a)}<div class="advisor-name-stack"><strong>${esc(a.name)}</strong>${String(a.id)===String(topSellerId)?'<small>TOP SELLER</small>':''}${direct}</div></div><span class="${movementClass(m)}">${m}</span><strong class="sales-number">${a.sales}</strong></div>`}).join('')}</section>`;
+  return `<section class="panel ranking-panel"><div class="panel-title"><div><p class="eyebrow plain">${eyebrow}</p><h2>${title}</h2></div><span class="icon">🏆</span></div><div class="table-head"><span>#</span><span>Asesor</span><span>Movimiento</span><span>Ventas</span></div>${advisors.map((a,i)=>{const m=movement(a,i+1);return `<div class="rank-row ${a.id===topSellerId?'leader':''}"><span class="rank-number">${String(i+1).padStart(2,'0')}</span><div class="advisor-cell">${avatar(a)}<div><strong>${esc(a.name)}</strong>${a.id===topSellerId?'<small>TOP SELLER</small>':''}</div></div><span class="${movementClass(m)}">${m}</span><strong class="sales-number">${a.sales}</strong></div>`}).join('')}</section>`;
 }
 
 function podium(advisors){
   const order=[advisors?.[1],advisors?.[0],advisors?.[2]],pos=[2,1,3];
-  return `<div class="podium">${order.map((a,i)=>a?`<div class="podium-item p${pos[i]}"><div class="podium-rank">${pos[i]===1?'♛':'◉'}</div>${avatar(a,pos[i]===1)}<strong>${esc(a.name)}</strong><span>${a.sales} ventas</span>${pos[i]!==1?`<div class="podium-direct-downloads"><button data-award-download="png" data-award-rank="${pos[i]}" data-advisor-id="${esc(a.id)}">PNG</button><button data-award-download="pdf" data-award-rank="${pos[i]}" data-advisor-id="${esc(a.id)}">PDF</button></div>`:''}<div class="podium-block">${pos[i]}</div></div>`:'').join('')}</div>`;
+  return `<div class="podium">${order.map((a,i)=>a?`<div class="podium-item p${pos[i]}"><div class="podium-rank">${pos[i]===1?'♛':'◉'}</div>${avatar(a,pos[i]===1)}<strong>${esc(a.name)}</strong><span>${a.sales} ventas</span><div class="podium-block">${pos[i]}</div></div>`:'').join('')}</div>`;
 }
 
 function awardMeta(rank=1){
@@ -69,7 +69,7 @@ function publicView(){
       <section class="panel podium-panel"><div class="panel-title"><div><p class="eyebrow plain">PODIO DEL MES</p><h2>Top 3 público</h2></div><span class="icon">🥇</span></div>${podium(advisors.slice(0,3))}</section>
       ${awardsShowcase(advisors.slice(0,3),'dark')}
       ${ranking(advisors,{topSellerId:top?.id})}
-      <footer>Última actualización: ${new Date(state.data.updatedAt).toLocaleString('es-MX')} · MARNEZ Desarrollos · v0.7.2</footer>
+      <footer>Última actualización: ${new Date(state.data.updatedAt).toLocaleString('es-MX')} · MARNEZ Desarrollos</footer>
     </main></div>`;
   wireCommon();
 }
@@ -86,7 +86,7 @@ const navItems=[
 function sidebar(active){
   const user=state.auth.user;
   const visibleNav=navItems.filter(([id])=>id!=='users'||user?.role==='superadmin');
-  return `<aside class="sidebar">${brand('compact')}<nav>${visibleNav.map(([id,icon,label,path])=>`<button class="${id===active?'active':''}" data-nav="${path}">${icon} ${label}</button>`).join('')}</nav><div class="sidebar-card"><p class="eyebrow">SESIÓN</p><p><strong>${esc(user?.name||user?.email||'Administrador')}</strong><br><span>${esc(roleLabel(user?.role))}</span></p></div><div class="sidebar-card"><p class="eyebrow">RANKING PÚBLICO</p><p>Las ventas reales se conservan. Desde Asesores decides quién participa en el ranking y quién puede recibir Top Seller.</p></div><button class="ghost" data-nav="/">Ir a vista asesores →</button><div class="sidebar-version">v0.7.2</div><button class="ghost logout-button" data-logout>Cerrar sesión</button></aside>`;
+  return `<aside class="sidebar">${brand('compact')}<nav>${visibleNav.map(([id,icon,label,path])=>`<button class="${id===active?'active':''}" data-nav="${path}">${icon} ${label}</button>`).join('')}</nav><div class="sidebar-card"><p class="eyebrow">SESIÓN</p><p><strong>${esc(user?.name||user?.email||'Administrador')}</strong><br><span>${esc(roleLabel(user?.role))}</span></p></div><div class="sidebar-card"><p class="eyebrow">RANKING PÚBLICO</p><p>Las ventas reales se conservan. Desde Asesores decides quién participa en el ranking y quién puede recibir Top Seller.</p></div><button class="ghost" data-nav="/">Ir a vista asesores →</button><button class="ghost logout-button" data-logout>Cerrar sesión</button></aside>`;
 }
 function roleLabel(role){return role==='superadmin'?'Superadministrador':role==='admin'?'Administrador':'Visualizador'}
 function canEditAdmin(){return ['superadmin','admin'].includes(state.auth.user?.role)}
@@ -137,7 +137,7 @@ async function dashboardView(){
     const real=data.realRanking||[], pub=data.publicRanking||[], top=data.topSeller;
     const body=`<div class="kpis four"><div class="kpi"><b>▥</b><span>Ventas reales<strong>${data.totals?.sales||0}</strong></span></div><div class="kpi"><b>♙</b><span>Asesores en Excel<strong>${data.totals?.advisors||0}</strong></span></div><div class="kpi"><b>◎</b><span>Participan ranking<strong>${data.totals?.publicAdvisors||0}</strong></span></div><div class="kpi"><b>♛</b><span>Top Seller<strong>${esc(top?.name||'—')}</strong></span></div></div>
       <div class="compare-note"><strong>Ranking real vs. ranking público</strong><span>El ranking real respeta el Excel. El público aplica las reglas de reconocimiento configuradas por administración.</span></div>
-      <div class="admin-grid admin-grid-equal">${ranking(real,{title:'Ranking real',eyebrow:'DATOS DEL EXCEL'})}${ranking(pub,{title:'Ranking público',eyebrow:'VISIBLE PARA ASESORES',topSellerId:top?.id,showAwardDownloads:true})}</div>
+      <div class="admin-grid admin-grid-equal">${ranking(real,{title:'Ranking real',eyebrow:'DATOS DEL EXCEL'})}${ranking(pub,{title:'Ranking público',eyebrow:'VISIBLE PARA ASESORES',topSellerId:top?.id})}</div>
       <section class="panel source-panel"><div><p class="eyebrow plain">SINCRONIZACIÓN</p><h2>Excel original</h2><p>Última sincronización: ${data.source?.lastSyncAt?new Date(data.source.lastSyncAt).toLocaleString('es-MX'):'Pendiente'} · Filas procesadas: ${data.source?.usedRows||0}</p>${data.source?.lastError?`<p class="error-text">${esc(data.source.lastError)}</p>`:''}</div>${canEditAdmin()?'<button class="secondary" data-sync>↻ Sincronizar ahora</button>':''}<pre id="syncResult"></pre></section>`;
     adminFrame('dashboard','Dashboard de ventas','Consulta el resultado real y el ranking de reconocimiento por separado.',body,statusPill(!data.source?.lastError,data.source?.lastError?'Con alerta':'Sincronizado'));
     wireAdminActions();
