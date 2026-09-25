@@ -1,8 +1,8 @@
-# MARNEZ Sales Score · V0.7.0
+# MARNEZ Sales Score · V0.7.1
 
 Versión con acceso administrativo protegido, roles reales y reconocimiento Top Seller premium.
 
-## Novedades V0.7.0
+## Novedades V0.7.1
 
 - Login real para `/admin` con sesión segura mediante cookie `HttpOnly`.
 - El botón **Administrador** no aparece en la vista pública si no existe una sesión administrativa iniciada.
@@ -41,7 +41,7 @@ Después del despliegue:
 ```json
 {
   "ok": true,
-  "version": "0.7.0",
+  "version": "0.7.1",
   "d1": true,
   "sharepointConfigured": true,
   "authConfigured": false
@@ -71,7 +71,7 @@ Las rutas `/api/admin/*`, sincronización y diagnóstico de SharePoint están pr
 
 ## Base D1
 
-La V0.7.0 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
+La V0.7.1 crea automáticamente las columnas de autenticación y la tabla `admin_sessions` al ejecutarse. También se incluye `migrations/0003_admin_auth.sql` como referencia para instalaciones nuevas.
 
 ## Top Seller y diploma
 
@@ -87,14 +87,14 @@ La vista pública mantiene:
 El diploma tiene fondo blanco, detalles dorados, identidad MARNEZ y muestra las ventas del asesor. No incluye firma.
 
 
-## Corrección V0.7.0
+## Corrección V0.7.1
 - Corrige HTTP 500 al activar el primer administrador en Workers Free.
 - Sustituye PBKDF2 intensivo por HMAC-SHA256 con salt y secreto privado del Worker para respetar el límite de CPU.
 - Los errores de activación/login ahora devuelven un mensaje descriptivo.
 - Mantén `ADMIN_SETUP_CODE` configurado; opcionalmente puede usarse `ADMIN_AUTH_SECRET` como secreto dedicado.
 
 
-## Acceso inicial V0.7.0
+## Acceso inicial V0.7.1
 - Se eliminó completamente el campo `ADMIN_SETUP_CODE`.
 - La pantalla `/admin` muestra únicamente el login.
 - Si todavía no existe un administrador, el primer inicio de sesión válido crea automáticamente el Superadministrador.
@@ -103,28 +103,35 @@ El diploma tiene fondo blanco, detalles dorados, identidad MARNEZ y muestra las 
 - No guardes contraseñas en GitHub ni en `wrangler.toml`.
 
 
-## Novedades V0.7.0
+## Novedades V0.7.1
 - Fallback automático a iniciales cuando una fotografía externa falla.
 - Carga directa de fotografías desde Administrador → Asesores.
 - Las fotografías se recortan a formato cuadrado, se comprimen y se guardan en D1 como imagen optimizada; no requieren URL pública.
 - Botón para quitar fotografía y volver a iniciales.
 
 
-## Novedades V0.7.0
+## Novedades V0.7.1
 - Rediseño visual de los reconocimientos con un estilo premium inspirado en la referencia compartida.
 - Reconocimiento PNG ahora en formato horizontal con fondo oscuro, foto protagonista, nombre sobre banda central y título TOP SELLER destacado.
 - Certificado PDF horizontal rediseñado con la misma línea visual premium y mucho menos texto.
 - Eliminados montos, conteos y bloques secundarios para priorizar foto, nombre y reconocimiento.
 
 
-## Novedades V0.7.0
+## Novedades V0.7.1
 - Descarga de reconocimiento PNG y certificado PDF también para el 2do y 3er lugar.
 - Nuevo bloque de "Descargas del podio" en la vista pública y en el panel Top Seller del administrador.
 - Los reconocimientos se personalizan automáticamente según la posición: Top Seller, Segundo Lugar y Tercer Lugar.
 
 
-## Novedades V0.7.0
+## Novedades V0.7.1
 - El apartado Top Seller ahora se llama Reconocimientos.
 - Se muestran directamente 1er, 2do y 3er lugar en tarjetas visibles sin tener que buscar otro bloque.
 - Cada posición tiene botón propio para descargar Reconocimiento PNG y Certificado PDF.
 - Corregida la búsqueda de asesores por ID para que los botones funcionen aunque D1 devuelva IDs numéricos.
+
+
+## Corrección V0.7.1
+- Las tarjetas de Top 1, Top 2 y Top 3 aparecen directamente al abrir Administrador → Reconocimientos.
+- Cada posición incluye sus botones de Reconocimiento PNG y Certificado PDF.
+- Se corrigió la comparación de IDs numéricos/texto que podía impedir las descargas.
+- Se versionaron app.js y styles.css para evitar que el navegador conserve la interfaz anterior en caché.
