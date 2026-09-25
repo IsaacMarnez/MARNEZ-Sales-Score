@@ -39,6 +39,25 @@ function podium(advisors){
   return `<div class="podium">${order.map((a,i)=>a?`<div class="podium-item p${pos[i]}"><div class="podium-rank">${pos[i]===1?'♛':'◉'}</div>${avatar(a,pos[i]===1)}<strong>${esc(a.name)}</strong><span>${a.sales} ventas</span><div class="podium-block">${pos[i]}</div></div>`:'').join('')}</div>`;
 }
 
+function awardMeta(rank=1){
+  if(Number(rank)===2)return{rank:2,title:'SEGUNDO LUGAR',subtitle:'Reconocimiento al segundo lugar del mes',short:'2do lugar',slug:'segundo-lugar'};
+  if(Number(rank)===3)return{rank:3,title:'TERCER LUGAR',subtitle:'Reconocimiento al tercer lugar del mes',short:'3er lugar',slug:'tercer-lugar'};
+  return{rank:1,title:'TOP SELLER',subtitle:'Reconocimiento al mejor asesor del mes',short:'Top Seller',slug:'top-seller'};
+}
+
+function awardButtons(advisor,rank,theme='light'){
+  const meta=awardMeta(rank);
+  const dark=theme==='dark'?' secondary-dark':'';
+  return `<div class="cta-row award-actions-row"><button class="secondary${dark}" data-award-download="png" data-award-rank="${rank}" data-advisor-id="${esc(advisor.id)}">⬇ Reconocimiento PNG</button><button class="secondary${dark}" data-award-download="pdf" data-award-rank="${rank}" data-advisor-id="${esc(advisor.id)}">⬇ Certificado PDF</button></div>`;
+}
+
+function awardsShowcase(advisors,theme='light'){
+  if(!advisors?.length)return '';
+  return `<section class="panel award-showcase ${theme==='dark'?'award-showcase-dark':''}"><div class="panel-title"><div><p class="eyebrow plain">RECONOCIMIENTOS</p><h2>Descargas del podio</h2></div><span class="icon">🏅</span></div><div class="award-grid">${advisors.slice(0,3).map((a,i)=>{const meta=awardMeta(i+1);return `<article class="award-card ${i===0?'award-card-highlight':''}"><div class="award-card-head"><span class="award-rank-badge">${String(i+1).padStart(2,'0')}</span><div class="award-card-avatar">${avatar(a)}</div></div><div class="award-card-copy"><small>${meta.short}</small><h3>${esc(a.name)}</h3><p>${meta.subtitle}</p></div>${awardButtons(a,i+1,theme)}</article>`}).join('')}</div></section>`;
+}
+
+function advisorById(id){return (state.data.advisors||[]).find(a=>a.id===id)||null}
+
 function publicView(){
   const advisors=state.data.advisors||[];
   const top=state.data.topSeller||null;
@@ -48,6 +67,7 @@ function publicView(){
       <div class="hero-copy"><p class="eyebrow plain">RANKING DE VENTAS · ${monthUpper}</p><h1>Resultados que<br><span>se reconocen.</span></h1><p>Score en vivo para visualizar el desempeño comercial, destacar al Top Seller del mes y compartir su reconocimiento en PNG.</p></div>
       ${top?`<section class="top-card top-card-premium"><div class="top-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="top-glow"></div><div class="top-card-grid"><div class="top-copy-zone"><div class="eyebrow">TOP SELLER · ${monthUpper}</div><p class="muted">Reconocimiento del mes</p><h1>${esc(top.name)}</h1><p class="top-copy">${TOP_SELLER_MESSAGE}</p><div class="top-stats"><div><strong>${top.sales}</strong><span>Ventas</span></div>${top.amount?`<div><strong>${money(top.amount)}</strong><span>Monto</span></div>`:''}</div><div class="cta-row"><button class="primary" data-celebrate>★ Mostrar reconocimiento</button><button class="secondary secondary-dark" data-download-top>⬇ Reconocimiento PNG</button><button class="secondary secondary-dark" data-download-diploma>⬇ Certificado PDF</button></div></div><div class="top-photo-zone"><div class="top-photo-frame">${avatar(top,true)}</div><div class="top-award-badge"><span>01</span><small>TOP SELLER</small></div></div></div></section>`:`<section class="panel empty-panel"><h2>Top Seller pendiente</h2><p>No hay asesores elegibles para reconocimiento. Puedes configurarlos desde Administrador → Asesores.</p></section>`}
       <section class="panel podium-panel"><div class="panel-title"><div><p class="eyebrow plain">PODIO DEL MES</p><h2>Top 3 público</h2></div><span class="icon">🥇</span></div>${podium(advisors.slice(0,3))}</section>
+      ${awardsShowcase(advisors.slice(0,3),'dark')}
       ${ranking(advisors,{topSellerId:top?.id})}
       <footer>Última actualización: ${new Date(state.data.updatedAt).toLocaleString('es-MX')} · MARNEZ Desarrollos</footer>
     </main></div>`;
@@ -140,10 +160,12 @@ async function advisorsView(){
 async function topSellerView(){
   loadingView('top-seller','Top Seller');
   try{
-    const data=await fetchJson('/api/score');
-    state.data=data;
+    const data=await fetchJson('/api/admin/overview');
+    state.adminCache.overview=data;
+    state.data={...state.data,advisors:data.publicRanking||state.data.advisors||[],topSeller:data.topSeller||null,updatedAt:data.updatedAt||state.data.updatedAt};
     const top=data.topSeller;
-    const body=top?`<div class="top-seller-admin-grid"><section class="panel top-seller-preview premium-preview"><p class="eyebrow plain">RECONOCIMIENTO ACTUAL</p><div class="preview-hero"><div class="preview-photo-frame">${avatar(top,true)}</div><div class="preview-copy"><h2>${esc(top.name)}</h2><p>${top.sales} ventas${top.amount?` · ${money(top.amount)}`:''}</p><blockquote>${DIPLOMA_MOTIVATION}</blockquote></div></div><div class="cta-row centered wrap"><button class="primary" data-celebrate>★ Ver animación</button><button class="secondary" data-download-top>⬇ Descargar reconocimiento PNG</button><button class="secondary" data-download-diploma>⬇ Descargar certificado PDF</button></div></section><section class="panel diploma-info-card"><p class="eyebrow plain">DIPLOMA</p><h2>Reconocimiento institucional</h2><p>Además de la pieza visual Top Seller, el portal genera un diploma premium con la leyenda <strong>“Top Seller del Mes”</strong> y una frase motivadora.</p><ul class="feature-list"><li>Formato institucional MARNEZ</li><li>Nombre del asesor en grande</li><li>Mes del reconocimiento</li><li>Leyenda motivadora</li></ul><button class="secondary" data-nav="/admin/advisors">Configurar asesores →</button></section></div>`:`<section class="panel"><h2>No hay Top Seller elegible</h2><p>Activa al menos un asesor desde Asesores.</p><button class="secondary" data-nav="/admin/advisors">Ir a Asesores</button></section>`;
+    const podiumList=(data.publicRanking||[]).slice(0,3);
+    const body=top?`<div class="top-seller-admin-grid"><section class="panel top-seller-preview premium-preview"><p class="eyebrow plain">RECONOCIMIENTO ACTUAL</p><div class="preview-hero"><div class="preview-photo-frame">${avatar(top,true)}</div><div class="preview-copy"><h2>${esc(top.name)}</h2><p>${top.sales} ventas${top.amount?` · ${money(top.amount)}`:''}</p><blockquote>${DIPLOMA_MOTIVATION}</blockquote></div></div><div class="cta-row centered wrap"><button class="primary" data-celebrate>★ Ver animación</button><button class="secondary" data-download-top>⬇ Descargar reconocimiento PNG</button><button class="secondary" data-download-diploma>⬇ Descargar certificado PDF</button></div></section><section class="panel diploma-info-card"><p class="eyebrow plain">RECONOCIMIENTOS</p><h2>Podio completo</h2><p>Ahora puedes descargar también el reconocimiento y el certificado del <strong>2do</strong> y <strong>3er lugar</strong>.</p><ul class="feature-list"><li>1er lugar: Top Seller</li><li>2do lugar: reconocimiento institucional</li><li>3er lugar: reconocimiento institucional</li><li>PNG y PDF para cada posición</li></ul><button class="secondary" data-nav="/admin/advisors">Configurar asesores →</button></section></div>${awardsShowcase(podiumList,'light')}`:`<section class="panel"><h2>No hay Top Seller elegible</h2><p>Activa al menos un asesor desde Asesores.</p><button class="secondary" data-nav="/admin/advisors">Ir a Asesores</button></section>`;
     adminFrame('top-seller','Top Seller','Vista previa, animación y descarga del reconocimiento.',body);
     wireCommon();
   }catch(e){adminError('top-seller','Top Seller',e);}
@@ -202,8 +224,9 @@ function wireCommon(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.nav)));
   document.querySelector('[data-logout]')?.addEventListener('click',logout);
   document.querySelector('[data-celebrate]')?.addEventListener('click',celebration);
-  document.querySelectorAll('[data-download-top]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadRecognitionPng(top)}));
-  document.querySelectorAll('[data-download-diploma]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadCertificatePdf(top)}));
+  document.querySelectorAll('[data-download-top]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadRecognitionPng(top,1)}));
+  document.querySelectorAll('[data-download-diploma]').forEach(btn=>btn.addEventListener('click',async()=>{const top=state.data.topSeller;if(top)await downloadCertificatePdf(top,1)}));
+  document.querySelectorAll('[data-award-download]').forEach(btn=>btn.addEventListener('click',async()=>{const advisor=advisorById(btn.dataset.advisorId);const rank=Number(btn.dataset.awardRank||1);if(!advisor)return;if(btn.dataset.awardDownload==='pdf')await downloadCertificatePdf(advisor,rank);else await downloadRecognitionPng(advisor,rank)}));
 }
 function wireAdminActions(){document.querySelector('[data-sync]')?.addEventListener('click',validateSync)}
 
@@ -308,8 +331,8 @@ function celebration(){
   el.innerHTML=`<div class="confetti c1"></div><div class="confetti c2"></div><div class="confetti c3"></div><div class="confetti c4"></div><div class="celebration-card premium-card"><div class="celebration-watermark"><img src="${ASSETS.logoSeal}" alt=""></div><div class="celebration-grid"><div class="celebration-copy"><img src="${ASSETS.logoStacked}" alt="Marnez Desarrollos" class="celebration-logo"><p class="eyebrow plain">TOP SELLER DEL MES · ${monthUpper}</p><h1>${esc(a.name)}</h1><p>${TOP_SELLER_MESSAGE}</p><div class="celebration-pill-row"><span class="celebration-pill">${a.sales} ventas</span>${a.amount?`<span class="celebration-pill">${money(a.amount)}</span>`:''}</div><blockquote>${DIPLOMA_MOTIVATION}</blockquote></div><div class="celebration-visual"><div class="celebration-photo-wrap">${avatar(a,true)}</div><div class="recognition-score"><strong>${a.sales}</strong><span>VENTAS</span></div></div></div><div class="modal-actions"><button class="primary" data-modal-download>⬇ Reconocimiento PNG</button><button class="secondary" data-modal-diploma>⬇ Certificado PDF</button><button class="secondary" data-close>Cerrar</button></div><small>MARNEZ DESARROLLOS</small></div>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el||e.target.closest('[data-close]'))el.remove()});
-  el.querySelector('[data-modal-download]')?.addEventListener('click',()=>downloadRecognitionPng(a));
-  el.querySelector('[data-modal-diploma]')?.addEventListener('click',()=>downloadCertificatePdf(a));
+  el.querySelector('[data-modal-download]')?.addEventListener('click',()=>downloadRecognitionPng(a,1));
+  el.querySelector('[data-modal-diploma]')?.addEventListener('click',()=>downloadCertificatePdf(a,1));
 }
 
 let lastScoreSignature='';
@@ -326,95 +349,122 @@ window.addEventListener('popstate',render);
 (async function initApp(){await Promise.all([refreshAuth(),refreshScore(false)]);render();})();
 setInterval(()=>refreshScore(true),30000);
 
-async function downloadRecognitionPng(advisor){
-  const dataUrl=(await buildRecognitionCanvas(advisor)).toDataURL('image/png');
+async function downloadRecognitionPng(advisor,rank=1){
+  const meta=awardMeta(rank);
+  const dataUrl=(await buildRecognitionCanvas(advisor,rank)).toDataURL('image/png');
   const link=document.createElement('a');
   const safeName=advisor.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
-  link.href=dataUrl;link.download=`top-seller-reconocimiento-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.png`;document.body.appendChild(link);link.click();link.remove();
+  link.href=dataUrl;link.download=`${meta.slug}-reconocimiento-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.png`;document.body.appendChild(link);link.click();link.remove();
 }
 
-async function downloadCertificatePdf(advisor){
-  const canvas=await buildDiplomaCanvas(advisor);
+async function downloadCertificatePdf(advisor,rank=1){
+  const meta=awardMeta(rank);
+  const canvas=await buildDiplomaCanvas(advisor,rank);
   const pdfBlob=canvasToPdfBlob(canvas);
   const link=document.createElement('a');
   const safeName=advisor.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
-  link.href=URL.createObjectURL(pdfBlob);link.download=`top-seller-certificado-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.pdf`;document.body.appendChild(link);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000);link.remove();
+  link.href=URL.createObjectURL(pdfBlob);link.download=`${meta.slug}-certificado-${safeName}-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}.pdf`;document.body.appendChild(link);link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000);link.remove();
 }
 
-async function buildRecognitionPng(advisor){
-  return (await buildRecognitionCanvas(advisor)).toDataURL('image/png');
+async function buildRecognitionPng(advisor,rank=1){
+  return (await buildRecognitionCanvas(advisor,rank)).toDataURL('image/png');
 }
 
-async function buildDiplomaPng(advisor){
-  return (await buildDiplomaCanvas(advisor)).toDataURL('image/png');
+async function buildDiplomaPng(advisor,rank=1){
+  return (await buildDiplomaCanvas(advisor,rank)).toDataURL('image/png');
 }
 
-async function buildRecognitionCanvas(advisor){
-  const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1350;const ctx=canvas.getContext('2d');
-  const W=canvas.width,H=canvas.height,CX=W/2;
-  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',muted='#7a7a7a';
-  ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
-  roundRect(ctx,24,24,W-48,H-48,26,paper,goldSoft);
-  roundRect(ctx,48,48,W-96,H-96,22,null,gold);
-  roundRect(ctx,66,66,W-132,H-132,18,null,'#eadfbe');
+async function buildRecognitionCanvas(advisor,rank=1){
+  const canvas=document.createElement('canvas');canvas.width=1600;canvas.height=900;const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height;
+  const meta=awardMeta(rank);
+  const gold='#cba164',goldSoft='#ecd8b3',navy='#08111f',navy2='#121f36',cream='#f6f0e5',white='#ffffff';
 
-  ctx.strokeStyle=gold;ctx.lineWidth=4;
-  [[88,88,165,88,88,165],[W-88,88,W-165,88,W-88,165],[88,H-88,165,H-88,88,H-165],[W-88,H-88,W-165,H-88,W-88,H-165]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
+  const bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#03070f'); bg.addColorStop(0.5,'#0a1020'); bg.addColorStop(1,'#131f31');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  drawGlow(ctx,260,760,420,'rgba(203,161,100,0.12)');
+  drawGlow(ctx,1120,260,320,'rgba(203,161,100,0.12)');
 
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=250,h=logo.height*(w/logo.width);ctx.drawImage(logo,CX-w/2,88,w,h);}
+  // dotted pattern right and left bottom
+  ctx.fillStyle='rgba(236,216,179,0.18)';
+  for(let x=1260;x<1540;x+=18){ for(let y=36;y<330;y+=18){ ctx.beginPath(); ctx.arc(x,y,2.2,0,Math.PI*2); ctx.fill(); } }
+  for(let x=26;x<270;x+=18){ for(let y=540;y<855;y+=18){ ctx.beginPath(); ctx.arc(x,y,2.2,0,Math.PI*2); ctx.fill(); } }
+
+  const watermark=await loadImageSafe(ASSETS.logoSeal);
+  if(watermark){ctx.save();ctx.globalAlpha=.18;ctx.drawImage(watermark,420,120,720,720);ctx.restore();}
+
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);
+  if(logo){const w=250,h=logo.height*(w/logo.width);ctx.drawImage(logo,W/2-w/2,50,w,h);}
+
+  await drawAdvisorHeroImage(ctx,advisor,560,96,480,520,30);
+
+  // name band
+  const band=ctx.createLinearGradient(240,0,1320,0);
+  band.addColorStop(0,'rgba(203,161,100,0.18)');
+  band.addColorStop(.5,'rgba(247,240,229,0.88)');
+  band.addColorStop(1,'rgba(203,161,100,0.18)');
+  roundRect(ctx,240,520,1120,118,18,band,null);
+
   ctx.textAlign='center';
-  ctx.fillStyle=gold;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER',CX,208);
-  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,CX,240);
-  ctx.fillStyle=gold;ctx.fillRect(CX-110,260,220,3);
+  const nameSize=fitTextWidth(ctx,advisor.name,1040,86,46,'700');
+  ctx.fillStyle='#16161b'; ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`; ctx.fillText(advisor.name,W/2,598);
 
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.03;ctx.drawImage(seal,CX-220,330,440,440);ctx.restore();}
-  await drawAdvisorImage(ctx,advisor,CX,565,240,'#ffffff');
-  ctx.lineWidth=6;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(CX,565,255,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle=gold; ctx.font='700 86px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(meta.title,W/2,720);
+  ctx.fillStyle=white; ctx.font='500 46px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(meta.subtitle,W/2,786);
+  ctx.fillStyle=goldSoft; ctx.font='600 22px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(monthUpper,W/2,842);
 
-  const nameSize=fitTextWidth(ctx,advisor.name,920,76,42,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,CX,905);
-  ctx.fillStyle=gold;ctx.font='700 34px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',CX,968);
-  ctx.fillStyle=muted;ctx.font='500 26px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento a su excelencia comercial.',CX,1022);
-
-  ctx.fillStyle=gold;ctx.fillRect(230,1140,620,3);
-  ctx.fillStyle=navy;ctx.font='700 22px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',CX,1192);
-  ctx.fillStyle=muted;ctx.font='500 16px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,CX,1226);
+  if(logo){const w=130,h=logo.height*(w/logo.width);ctx.save();ctx.globalAlpha=.8;ctx.drawImage(logo,W/2-w/2,855-40,w,h);ctx.restore();}
   return canvas;
 }
 
-async function buildDiplomaCanvas(advisor){
-  const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=1414;const ctx=canvas.getContext('2d');
+async function buildDiplomaCanvas(advisor,rank=1){
+  const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=1125;const ctx=canvas.getContext('2d');
   const W=canvas.width,H=canvas.height;
-  const gold='#b7933f',goldSoft='#dfd1a8',paper='#fcfbf8',navy='#1c2a35',muted='#7a7a7a';
-  ctx.fillStyle=paper;ctx.fillRect(0,0,W,H);
-  roundRect(ctx,36,36,W-72,H-72,26,paper,goldSoft);
-  roundRect(ctx,64,64,W-128,H-128,22,null,gold);
-  roundRect(ctx,88,88,W-176,H-176,18,null,'#eadfbe');
+  const meta=awardMeta(rank);
+  const gold='#c39a58',goldSoft='#ecd8b3',navy='#08111f',navy2='#13223a',white='#ffffff';
 
-  ctx.strokeStyle=gold;ctx.lineWidth=5;
-  [[132,132,226,132,132,226],[W-132,132,W-226,132,W-132,226],[132,H-132,226,H-132,132,H-226],[W-132,H-132,W-226,H-132,W-132,H-226]].forEach(([x1,y1,x2,y2,x3,y3])=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1,y1);ctx.lineTo(x3,y3);ctx.stroke();});
+  const bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#040910'); bg.addColorStop(0.52,'#0b1324'); bg.addColorStop(1,'#142239');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  roundRect(ctx,34,34,W-68,H-68,28,null,'rgba(236,216,179,0.45)');
+  roundRect(ctx,58,58,W-116,H-116,24,null,'rgba(195,154,88,0.75)');
+  drawGlow(ctx,300,870,470,'rgba(203,161,100,0.10)');
+  drawGlow(ctx,1510,270,340,'rgba(203,161,100,0.10)');
 
-  const logo=await loadImageSafe(ASSETS.logoHorizontal);if(logo){const w=300,h=logo.height*(w/logo.width);ctx.drawImage(logo,850,128,w,h);}
-  ctx.textAlign='left';
-  ctx.fillStyle=gold;ctx.font='700 26px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER DEL MES',920,310);
-  ctx.fillStyle=muted;ctx.font='500 20px "Guaruja Neue", Arial, sans-serif';ctx.fillText(monthUpper,920,346);
-  ctx.fillStyle=gold;ctx.fillRect(920,370,260,3);
+  // dotted pattern
+  ctx.fillStyle='rgba(236,216,179,0.16)';
+  for(let x=1600;x<1940;x+=18){ for(let y=36;y<370;y+=18){ ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill(); } }
+  for(let x=44;x<320;x+=18){ for(let y=660;y<1060;y+=18){ ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill(); } }
 
-  const seal=await loadImageSafe(ASSETS.logoSeal);if(seal){ctx.save();ctx.globalAlpha=.03;ctx.drawImage(seal,152,360,520,520);ctx.restore();}
-  await drawAdvisorImage(ctx,advisor,430,700,255,'#ffffff');
-  ctx.lineWidth=6;ctx.strokeStyle=goldSoft;ctx.beginPath();ctx.arc(430,700,270,0,Math.PI*2);ctx.stroke();
+  const bigMark=await loadImageSafe(ASSETS.logoSeal);
+  if(bigMark){ctx.save();ctx.globalAlpha=.16;ctx.drawImage(bigMark,475,90,880,880);ctx.restore();}
 
-  const nameSize=fitTextWidth(ctx,advisor.name,880,86,48,'700');
-  ctx.fillStyle=navy;ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`;ctx.fillText(advisor.name,920,585);
-  ctx.fillStyle=gold;ctx.font='700 38px "Guaruja Neue", Arial, sans-serif';ctx.fillText('TOP SELLER',920,660);
-  ctx.fillStyle=muted;ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';ctx.fillText('Reconocimiento a su excelencia comercial.',920,725);
+  const logo=await loadImageSafe(ASSETS.logoHorizontal);
+  if(logo){const w=280,h=logo.height*(w/logo.width);ctx.drawImage(logo,860,80,w,h);}
 
-  ctx.fillStyle=navy;ctx.font='500 30px "Guaruja Neue", Arial, sans-serif';
-  drawWrappedAligned(ctx,DIPLOMA_MOTIVATION,920,815,760,44,3,'left');
+  await drawAdvisorHeroImage(ctx,advisor,250,190,620,700,38);
 
-  ctx.fillStyle=gold;ctx.fillRect(920,1090,620,3);
-  ctx.fillStyle=navy;ctx.font='700 24px "Guaruja Neue", Arial, sans-serif';ctx.fillText('MARNEZ DESARROLLOS',920,1140);
-  ctx.fillStyle=muted;ctx.font='500 18px "Guaruja Neue", Arial, sans-serif';ctx.fillText(`Reconocimiento corporativo · ${month}`,920,1174);
+  // name band and copy block
+  const band=ctx.createLinearGradient(0,0,0,0);
+  band.addColorStop(0,'rgba(203,161,100,0.18)');
+  band.addColorStop(.5,'rgba(247,240,229,0.90)');
+  band.addColorStop(1,'rgba(203,161,100,0.18)');
+  roundRect(ctx,760,360,1080,132,18,band,null);
+  const nameSize=fitTextWidth(ctx,advisor.name,980,92,50,'700');
+  ctx.textAlign='center';
+  ctx.fillStyle='#16161b'; ctx.font=`700 ${nameSize}px "Guaruja Neue", Arial, sans-serif`; ctx.fillText(advisor.name,1300,446);
+
+  ctx.fillStyle=gold; ctx.font='700 92px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(meta.title,1300,620);
+  ctx.fillStyle=white; ctx.font='500 46px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(meta.subtitle,1300,690);
+  ctx.fillStyle=goldSoft; ctx.font='600 26px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(monthUpper,1300,746);
+
+  ctx.fillStyle='rgba(236,216,179,0.12)';
+  roundRect(ctx,860,792,880,154,24,'rgba(255,255,255,0.04)','rgba(236,216,179,0.18)');
+  ctx.fillStyle=white; ctx.font='500 40px "Guaruja Neue", Arial, sans-serif';
+  drawWrappedCentered(ctx,'Tu constancia, liderazgo y dedicación inspiran resultados extraordinarios.',1300,855,760,48,2);
+
+  if(logo){const w=150,h=logo.height*(w/logo.width);ctx.save();ctx.globalAlpha=.85;ctx.drawImage(logo,1300-w/2,988,w,h);ctx.restore();}
   return canvas;
 }
 
@@ -459,11 +509,38 @@ async function drawAdvisorImage(ctx,advisor,x,y,r,borderColor){
   drawInitialsAvatar(ctx,advisor.name,x,y,r);ctx.lineWidth=8;ctx.strokeStyle=borderColor;ctx.beginPath();ctx.arc(x,y,r+5,0,Math.PI*2);ctx.stroke();
 }
 
+async function drawAdvisorHeroImage(ctx,advisor,x,y,w,h,radius=30){
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,0.35)'; ctx.shadowBlur=32; ctx.shadowOffsetY=14;
+  roundRect(ctx,x,y,w,h,radius,'rgba(255,255,255,0.04)',null);
+  ctx.restore();
+  if(advisor.photoUrl){
+    const photo=await loadImageSafe(advisor.photoUrl);
+    if(photo){
+      ctx.save();
+      ctx.beginPath();
+      roundedRectPath(ctx,x,y,w,h,radius);
+      ctx.clip();
+      drawCoverImage(ctx,photo,x,y,w,h);
+      ctx.restore();
+      ctx.strokeStyle='rgba(236,216,179,0.55)'; ctx.lineWidth=2.5;
+      roundedRectPath(ctx,x,y,w,h,radius); ctx.stroke();
+      return;
+    }
+  }
+  const g=ctx.createLinearGradient(x,y,x+w,y+h); g.addColorStop(0,'#e5e8ec'); g.addColorStop(1,'#cfd4db');
+  roundRect(ctx,x,y,w,h,radius,g,'rgba(236,216,179,0.55)');
+  ctx.fillStyle=COLORS.navy; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='700 130px "Guaruja Neue", Arial, sans-serif'; ctx.fillText(initials(advisor.name),x+w/2,y+h/2+10);
+  ctx.textBaseline='alphabetic';
+}
+
 function fitTextWidth(ctx,text,maxWidth,startSize,minSize,weight='700'){let size=startSize;while(size>minSize){ctx.font=`${weight} ${size}px "Guaruja Neue", Arial, sans-serif`;if(ctx.measureText(text).width<=maxWidth)break;size-=2}return size}
 function getWrappedLines(ctx,text,maxWidth,maxLines=Infinity){const words=String(text).trim().split(/\s+/),lines=[];let line='';words.forEach(word=>{const test=line?`${line} ${word}`:word;if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=word}else line=test});if(line)lines.push(line);if(lines.length<=maxLines)return lines;const trimmed=lines.slice(0,maxLines);let last=trimmed[maxLines-1];while(last.length && ctx.measureText(`${last}…`).width>maxWidth){last=last.slice(0,-1).trim()}trimmed[maxLines-1]=`${last}…`;return trimmed}
 function drawWrappedCentered(ctx,text,centerX,startY,maxWidth,lineHeight,maxLines=Infinity){const lines=getWrappedLines(ctx,text,maxWidth,maxLines);lines.forEach((l,i)=>ctx.fillText(l,centerX,startY+i*lineHeight));return lines.length*lineHeight}
 function drawWrappedAligned(ctx,text,x,startY,maxWidth,lineHeight,maxLines=Infinity,align='left'){const prev=ctx.textAlign;ctx.textAlign=align;const lines=getWrappedLines(ctx,text,maxWidth,maxLines);lines.forEach((l,i)=>ctx.fillText(l,x,startY+i*lineHeight));ctx.textAlign=prev;return lines.length*lineHeight}
-function roundRect(ctx,x,y,w,h,r,fill,stroke){const radius=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+radius,y);ctx.arcTo(x+w,y,x+w,y+h,radius);ctx.arcTo(x+w,y+h,x,y+h,radius);ctx.arcTo(x,y+h,x,y,radius);ctx.arcTo(x,y,x+w,y,radius);ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
+function roundedRectPath(ctx,x,y,w,h,r){const radius=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+radius,y);ctx.arcTo(x+w,y,x+w,y+h,radius);ctx.arcTo(x+w,y+h,x,y+h,radius);ctx.arcTo(x,y+h,x,y,radius);ctx.arcTo(x,y,x+w,y,radius);ctx.closePath();}
+function roundRect(ctx,x,y,w,h,r,fill,stroke){roundedRectPath(ctx,x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}}
 function drawGlow(ctx,x,y,radius,color){const g=ctx.createRadialGradient(x,y,0,x,y,radius);g.addColorStop(0,color);g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill()}
 function drawInitialsAvatar(ctx,name,x,y,r){ctx.save();ctx.fillStyle='#dde1e5';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle=COLORS.navy;ctx.font='700 54px "Guaruja Neue", Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(initials(name),x,y+4);ctx.restore();ctx.textBaseline='alphabetic'}
 function drawCoverImage(ctx,img,x,y,w,h){const scale=Math.max(w/img.width,h/img.height),dw=img.width*scale,dh=img.height*scale;ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh)}
